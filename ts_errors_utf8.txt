@@ -1,0 +1,6 @@
+src/lib/axios.ts(1,17): error TS1484: 'AxiosInstance' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/lib/axios.ts(1,32): error TS1484: 'AxiosResponse' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/lib/axios.ts(1,47): error TS1484: 'InternalAxiosRequestConfig' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/lib/axios.ts(2,10): error TS1484: 'ApiResponse' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/providers/ThemeProvider.tsx(1,1): error TS6133: 'React' is declared but its value is never read.
+src/providers/ThemeProvider.tsx(3,41): error TS2307: Cannot find module 'next-themes/dist/types' or its corresponding type declarations.
