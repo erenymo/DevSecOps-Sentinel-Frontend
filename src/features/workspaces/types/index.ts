@@ -33,5 +33,5 @@ export interface Component {
   isTransitive: boolean;
   parentName?: string;
   dependencyPath?: string;
-  licenseName?: string;
+  licenseNames?: string[];
 }

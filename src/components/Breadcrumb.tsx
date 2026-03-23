@@ -30,7 +30,7 @@ export function Breadcrumb({ overrides = {} }: BreadcrumbProps) {
   };
 
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-muted-foreground mb-6">
+    <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground mb-6">
       <Link
         to="/dashboard"
         className="flex items-center gap-1 hover:text-foreground transition-colors"

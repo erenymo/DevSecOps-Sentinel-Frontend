@@ -19,6 +19,20 @@ import {
 } from "lucide-react";
 import type { Module, Component } from "@/features/workspaces/types";
 
+const getLicenseRisk = (name: string): "high" | "medium" | "low" => {
+  const upper = name.toUpperCase();
+  if (upper.includes("GPL") && !upper.includes("LGPL")) return "high";
+  if (upper.includes("LGPL") || upper.includes("MPL") || upper.includes("EPL") || upper.includes("CDDL")) return "medium";
+  return "low";
+};
+
+const getLicenseColor = (name: string) => {
+  const risk = getLicenseRisk(name);
+  if (risk === "high") return "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 border border-red-200 dark:border-red-500/30";
+  if (risk === "medium") return "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30";
+  return "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 border border-green-200 dark:border-green-500/30";
+};
+
 export function ModuleDetailPage() {
   const { workspaceId, moduleId } = useParams<{
     workspaceId: string;
@@ -76,8 +90,18 @@ export function ModuleDetailPage() {
               {comp.isTransitive ? 'Transitive' : 'Direct'}
             </span>
           </td>
-          <td className="px-4 py-3 text-muted-foreground">
-            {comp.licenseName || "Unknown"}
+          <td className="px-4 py-3">
+            <div className="flex flex-wrap gap-1">
+              {comp.licenseNames && comp.licenseNames.length > 0 ? (
+                comp.licenseNames.map((l, i) => (
+                  <span key={i} className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${getLicenseColor(l)}`}>
+                    {l}
+                  </span>
+                ))
+              ) : (
+                <span className="text-muted-foreground">Unknown</span>
+              )}
+            </div>
           </td>
         </tr>
         {isExpanded && children.map((child) => renderComponentRow(child, depth + 1))}
@@ -92,6 +116,10 @@ export function ModuleDetailPage() {
   const module: Module | undefined = modulesData?.data?.find(
     (m) => m.id === moduleId
   );
+
+  const licenseIssuesCount = components.filter(c => 
+    c.licenseNames && c.licenseNames.some(l => getLicenseRisk(l) !== "low")
+  ).length;
 
   const tabs = [
     {
@@ -115,7 +143,7 @@ export function ModuleDetailPage() {
     {
       label: "License Issues",
       icon: FileWarning,
-      count: 0,
+      count: licenseIssuesCount,
       color: "text-amber-500",
       bg: "bg-amber-500/10",
       description:
@@ -135,28 +163,28 @@ export function ModuleDetailPage() {
       />
 
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
             <PackageOpen className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight line-clamp-1">
               {module?.name || "Loading…"}
             </h1>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground text-sm line-clamp-1">
               {module?.ecosystem || ""}{module?.rootPath ? ` · ${module.rootPath}` : ""}
             </p>
           </div>
         </div>
         
         {/* Upload Action */}
-        <div className="flex items-center gap-2">
+        <div className="flex w-full sm:w-auto items-center gap-2">
           <Input 
             type="file" 
             accept=".json,.xml"
             onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="w-[250px] cursor-pointer"
+            className="w-full sm:w-[250px] cursor-pointer"
           />
           <Button 
             onClick={() => file && uploadSbom.mutate(file)}
@@ -202,8 +230,8 @@ export function ModuleDetailPage() {
                     <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                   </div>
                 ) : components.length > 0 ? (
-                  <div className="rounded-md border">
-                    <table className="w-full text-sm text-left">
+                  <div className="rounded-md border overflow-x-auto">
+                    <table className="w-full min-w-[600px] text-sm text-left">
                       <thead className="bg-muted/50 text-muted-foreground">
                         <tr>
                           <th className="px-4 py-3 font-medium">Name</th>
