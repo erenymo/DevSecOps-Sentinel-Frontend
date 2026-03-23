@@ -9,11 +9,13 @@ const apiClient: AxiosInstance = axios.create({
   },
 });
 
+import { authStore } from '@/features/auth/store/authStore';
+
 // Request interceptor
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     // Add token if exists logic here
-    const token = localStorage.getItem('token');
+    const token = authStore.getToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
