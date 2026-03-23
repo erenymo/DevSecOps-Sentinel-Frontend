@@ -24,3 +24,14 @@ export interface ModuleRequest {
   ecosystem: string;
   rootPath: string;
 }
+
+export interface Component {
+  id: string;
+  name: string;
+  version: string;
+  purl?: string;
+  isTransitive: boolean;
+  parentName?: string;
+  dependencyPath?: string;
+  licenseName?: string;
+}
