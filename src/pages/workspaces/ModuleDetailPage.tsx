@@ -41,9 +41,14 @@ export function ModuleDetailPage() {
 
   const [file, setFile] = useState<File | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [isEnriching, setIsEnriching] = useState<boolean>(false);
   
-  const uploadSbom = useUploadSbom(moduleId || "");
-  const { data: componentsData, isLoading: isComponentsLoading } = useModuleComponents(moduleId || "");
+  const uploadSbom = useUploadSbom(moduleId || "", () => {
+    setIsEnriching(true);
+    setFile(null);
+    setTimeout(() => setIsEnriching(false), 30000); // 30 sn timeout
+  });
+  const { data: componentsData, isLoading: isComponentsLoading } = useModuleComponents(moduleId || "", isEnriching);
   const components = componentsData?.data || [];
 
   const topLevelComponents = components.filter(
@@ -98,6 +103,10 @@ export function ModuleDetailPage() {
                     {l}
                   </span>
                 ))
+              ) : isEnriching ? (
+                <span className="flex items-center gap-1.5 text-muted-foreground text-xs font-medium">
+                  <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                </span>
               ) : (
                 <span className="text-muted-foreground">Unknown</span>
               )}
