@@ -33,6 +33,18 @@ const getLicenseColor = (name: string) => {
   return "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 border border-green-200 dark:border-green-500/30";
 };
 
+const getSeverityColor = (severityLevel?: string) => {
+  if (!severityLevel) return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700";
+  const upper = severityLevel.toUpperCase();
+  if (upper === "CRITICAL" || upper === "HIGH") 
+    return "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 border border-red-200 dark:border-red-500/30";
+  if (upper === "MEDIUM") 
+    return "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30";
+  if (upper === "LOW")
+    return "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 border border-green-200 dark:border-green-500/30";
+  return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700";
+};
+
 export function ModuleDetailPage() {
   const { workspaceId, moduleId } = useParams<{
     workspaceId: string;
@@ -50,6 +62,14 @@ export function ModuleDetailPage() {
   });
   const { data: componentsData, isLoading: isComponentsLoading } = useModuleComponents(moduleId || "", isEnriching);
   const components = componentsData?.data || [];
+
+  const allVulnerabilities = components.flatMap(c => 
+    (c.vulnerabilities || []).map(v => ({
+      componentName: c.name,
+      componentVersion: c.version,
+      ...v
+    }))
+  );
 
   const topLevelComponents = components.filter(
     (c) => !c.isTransitive || !c.parentName || !components.some((p) => p.name === c.parentName)
@@ -143,7 +163,7 @@ export function ModuleDetailPage() {
     {
       label: "Vulnerabilities",
       icon: ShieldAlert,
-      count: 0,
+      count: allVulnerabilities.length,
       color: "text-red-500",
       bg: "bg-red-500/10",
       description:
@@ -257,6 +277,51 @@ export function ModuleDetailPage() {
                 ) : (
                   <div className="p-8 border-2 border-dashed rounded-lg bg-muted/10 text-center text-muted-foreground text-sm">
                     No dependencies found. Upload an SBOM & analyze.
+                  </div>
+                )
+              ) : tab.label === "Vulnerabilities" ? (
+                isComponentsLoading || isEnriching ? (
+                  <div className="p-12 flex flex-col justify-center items-center gap-4">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    <p className="text-sm font-medium text-muted-foreground animate-pulse">The scanning process is ongoing.</p>
+                  </div>
+                ) : allVulnerabilities.length > 0 ? (
+                  <div className="rounded-md border overflow-x-auto">
+                    <table className="w-full min-w-[600px] text-sm text-left">
+                      <thead className="bg-muted/50 text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-3 font-medium">Component</th>
+                          <th className="px-4 py-3 font-medium">Version</th>
+                          <th className="px-4 py-3 font-medium">Vulnerability ID</th>
+                          <th className="px-4 py-3 font-medium">Severity</th>
+                          <th className="px-4 py-3 font-medium">Fixed In</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {allVulnerabilities.map((v, i) => (
+                          <tr key={i} className="hover:bg-muted/50 transition-colors border-b">
+                            <td className="px-4 py-3 font-medium">{v.componentName}</td>
+                            <td className="px-4 py-3">{v.componentVersion}</td>
+                            <td className="px-4 py-3 font-medium">
+                              <div className="flex flex-col">
+                                <span className="text-red-500">{v.externalId}</span>
+                                {v.vulnerabilityId && <span className="text-xs text-muted-foreground font-normal">{v.vulnerabilityId}</span>}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${getSeverityColor(v.severityLevel)}`}>
+                                {v.severityLevel || "UNKNOWN"} {v.severityScore !== undefined && v.severityScore !== null ? `(${v.severityScore})` : ""}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-green-600 dark:text-green-500 font-medium">{v.fixedVersion || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-8 border-2 border-dashed rounded-lg bg-muted/10 text-center text-muted-foreground text-sm">
+                    No vulnerabilities detected.
                   </div>
                 )
               ) : (

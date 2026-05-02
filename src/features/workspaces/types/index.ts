@@ -17,12 +17,25 @@ export interface Module {
   rootPath: string;
   workspaceId: string;
   createdAt: string;
+  dependencyCount?: number;
+  vulnerabilityCount?: number;
 }
 
 export interface ModuleRequest {
   name: string;
   ecosystem: string;
   rootPath: string;
+}
+
+export interface ComponentVulnerability {
+  externalId: string;
+  vulnerabilityId?: string;
+  severityType?: string;
+  severityScore?: number;
+  severityLevel?: string;
+  status: string;
+  currentVersion?: string;
+  fixedVersion?: string;
 }
 
 export interface Component {
@@ -34,4 +47,5 @@ export interface Component {
   parentName?: string;
   dependencyPath?: string;
   licenseNames?: string[];
+  vulnerabilities?: ComponentVulnerability[];
 }

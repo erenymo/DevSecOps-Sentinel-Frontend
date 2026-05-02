@@ -39,7 +39,7 @@ export function WorkspaceDetailPage() {
     },
     {
       label: "Vulnerabilities",
-      value: 0,
+      value: modules.reduce((acc, m) => acc + (m.vulnerabilityCount || 0), 0),
       icon: ShieldAlert,
       color: "text-red-500",
       bg: "bg-red-500/10",
@@ -159,13 +159,13 @@ export function WorkspaceDetailPage() {
                     {/* Right: Stats */}
                     <div className="flex items-center gap-4 sm:gap-6 text-sm">
                       <div className="text-center">
-                        <p className="text-lg font-bold">0</p>
+                        <p className="text-lg font-bold">{mod.dependencyCount || 0}</p>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
                           Deps
                         </p>
                       </div>
                       <div className="text-center">
-                        <p className="text-lg font-bold text-red-500">0</p>
+                        <p className="text-lg font-bold text-red-500">{mod.vulnerabilityCount || 0}</p>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
                           Vulns
                         </p>
