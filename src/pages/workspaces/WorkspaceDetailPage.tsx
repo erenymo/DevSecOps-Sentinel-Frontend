@@ -3,7 +3,8 @@ import { Breadcrumb } from "@/components/Breadcrumb";
 import { Card, CardContent } from "@/components/ui/card";
 import { CreateModuleModal } from "@/features/workspaces/components/CreateModuleModal";
 import { useWorkspaces } from "@/features/workspaces/hooks/useWorkspaces";
-import { useModulesByWorkspace } from "@/features/workspaces/hooks/useModules";
+import { useModulesByWorkspace, useDeleteModule } from "@/features/workspaces/hooks/useModules";
+import { Button } from "@/components/ui/button";
 import {
   Boxes,
   ShieldAlert,
@@ -12,6 +13,7 @@ import {
   PackageOpen,
   ChevronRight,
   Loader2,
+  Trash2
 } from "lucide-react";
 import type { Module } from "@/features/workspaces/types";
 
@@ -28,6 +30,20 @@ export function WorkspaceDetailPage() {
     (w) => w.id === workspaceId
   );
   const modules: Module[] = modulesData?.data || [];
+  
+  const deleteModuleMutation = useDeleteModule();
+
+  const handleDeleteModule = (e: React.MouseEvent, moduleId: string) => {
+    e.stopPropagation();
+    if (confirm("Are you sure you want to delete this module?")) {
+      deleteModuleMutation.mutate(moduleId);
+    }
+  };
+
+  const lastScanDates = modules.map(m => m.lastScanDate).filter(Boolean);
+  const latestScanDate = lastScanDates.length > 0
+    ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(Math.max(...lastScanDates.map(d => new Date(d!).getTime()))))
+    : "—";
 
   const summaryCards = [
     {
@@ -53,7 +69,7 @@ export function WorkspaceDetailPage() {
     },
     {
       label: "Last Scan",
-      value: "—",
+      value: latestScanDate,
       icon: Clock,
       color: "text-emerald-500",
       bg: "bg-emerald-500/10",
@@ -176,7 +192,18 @@ export function WorkspaceDetailPage() {
                           License
                         </p>
                       </div>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground/30 group-hover:text-primary transition-colors hidden sm:block" />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive hidden sm:flex"
+                          onClick={(e) => handleDeleteModule(e, mod.id)}
+                          disabled={deleteModuleMutation.isPending}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                        <ChevronRight className="h-5 w-5 text-muted-foreground/30 group-hover:text-primary transition-colors hidden sm:block" />
+                      </div>
                     </div>
                   </div>
                 </CardContent>
