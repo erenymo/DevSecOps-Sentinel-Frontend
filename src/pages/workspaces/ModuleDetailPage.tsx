@@ -16,7 +16,9 @@ import {
   Loader2,
   Upload,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  ArrowUpDown,
+  Search
 } from "lucide-react";
 import type { Module, Component } from "@/features/workspaces/types";
 
@@ -56,6 +58,12 @@ export function ModuleDetailPage() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [isEnriching, setIsEnriching] = useState<boolean>(false);
   
+  const [depSearchTerm, setDepSearchTerm] = useState("");
+  const [depSort, setDepSort] = useState<{ key: "name" | "license", direction: "asc" | "desc" } | null>({ key: "name", direction: "asc" });
+
+  const [vulnSearchTerm, setVulnSearchTerm] = useState("");
+  const [vulnSort, setVulnSort] = useState<{ key: "component" | "severity" | "status", direction: "asc" | "desc" } | null>({ key: "severity", direction: "desc" });
+  
   const uploadSbom = useUploadSbom(moduleId || "", () => {
     setIsEnriching(true);
     setFile(null);
@@ -79,9 +87,74 @@ export function ModuleDetailPage() {
     }))
   );
 
+  let filteredVulnerabilities = allVulnerabilities.filter(v => 
+    v.componentName.toLowerCase().includes(vulnSearchTerm.toLowerCase())
+  );
+
+  if (vulnSort) {
+    filteredVulnerabilities.sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+      if (vulnSort.key === "component") {
+        valA = a.componentName.toLowerCase();
+        valB = b.componentName.toLowerCase();
+      } else if (vulnSort.key === "severity") {
+        valA = a.severityScore || 0;
+        valB = b.severityScore || 0;
+      } else if (vulnSort.key === "status") {
+        valA = (a.status || "").toLowerCase();
+        valB = (b.status || "").toLowerCase();
+      }
+      
+      if (valA < valB) return vulnSort.direction === "asc" ? -1 : 1;
+      if (valA > valB) return vulnSort.direction === "asc" ? 1 : -1;
+      return 0;
+    });
+  }
+
   const topLevelComponents = components.filter(
     (c) => !c.isTransitive || !c.parentName || !components.some((p) => p.name === c.parentName)
   );
+
+  let filteredTopLevelComponents = topLevelComponents.filter(c => 
+    c.name.toLowerCase().includes(depSearchTerm.toLowerCase())
+  );
+
+  if (depSort) {
+    filteredTopLevelComponents.sort((a, b) => {
+      let valA = "";
+      let valB = "";
+      if (depSort.key === "name") {
+        valA = a.name.toLowerCase();
+        valB = b.name.toLowerCase();
+      } else if (depSort.key === "license") {
+        valA = (a.licenseNames && a.licenseNames[0]) ? a.licenseNames[0].toLowerCase() : "z"; 
+        valB = (b.licenseNames && b.licenseNames[0]) ? b.licenseNames[0].toLowerCase() : "z";
+      }
+      
+      if (valA < valB) return depSort.direction === "asc" ? -1 : 1;
+      if (valA > valB) return depSort.direction === "asc" ? 1 : -1;
+      return 0;
+    });
+  }
+
+  const handleDepSort = (key: "name" | "license") => {
+    setDepSort(prev => {
+      if (prev?.key === key) {
+        return prev.direction === "asc" ? { key, direction: "desc" } : null;
+      }
+      return { key, direction: "asc" };
+    });
+  };
+
+  const handleVulnSort = (key: "component" | "severity" | "status") => {
+    setVulnSort(prev => {
+      if (prev?.key === key) {
+        return prev.direction === "asc" ? { key, direction: "desc" } : null;
+      }
+      return { key, direction: "asc" };
+    });
+  };
 
   const toggleRow = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -267,20 +340,49 @@ export function ModuleDetailPage() {
                     <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                   </div>
                 ) : components.length > 0 ? (
-                  <div className="rounded-md border overflow-x-auto">
-                    <table className="w-full min-w-[600px] text-sm text-left">
-                      <thead className="bg-muted/50 text-muted-foreground">
-                        <tr>
-                          <th className="px-4 py-3 font-medium">Name</th>
-                          <th className="px-4 py-3 font-medium">Version</th>
-                          <th className="px-4 py-3 font-medium">Type</th>
-                          <th className="px-4 py-3 font-medium">License</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {topLevelComponents.map((c) => renderComponentRow(c))}
-                      </tbody>
-                    </table>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 max-w-sm relative">
+                      <Search className="w-4 h-4 absolute left-3 text-muted-foreground" />
+                      <Input
+                        placeholder="Search dependencies..."
+                        value={depSearchTerm}
+                        onChange={(e) => setDepSearchTerm(e.target.value)}
+                        className="pl-9 h-9"
+                      />
+                    </div>
+                    <div className="rounded-md border overflow-x-auto">
+                      <table className="w-full min-w-[600px] text-sm text-left">
+                        <thead className="bg-muted/50 text-muted-foreground">
+                          <tr>
+                            <th className="px-4 py-3 font-medium">
+                              <button onClick={() => handleDepSort("name")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+                                Name
+                                <ArrowUpDown className={`w-3 h-3 ${depSort?.key === "name" ? "text-primary" : ""}`} />
+                              </button>
+                            </th>
+                            <th className="px-4 py-3 font-medium">Version</th>
+                            <th className="px-4 py-3 font-medium">Type</th>
+                            <th className="px-4 py-3 font-medium">
+                              <button onClick={() => handleDepSort("license")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+                                License
+                                <ArrowUpDown className={`w-3 h-3 ${depSort?.key === "license" ? "text-primary" : ""}`} />
+                              </button>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {filteredTopLevelComponents.length > 0 ? (
+                            filteredTopLevelComponents.map((c) => renderComponentRow(c))
+                          ) : (
+                            <tr>
+                              <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                                No dependencies match your search.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 ) : (
                   <div className="p-8 border-2 border-dashed rounded-lg bg-muted/10 text-center text-muted-foreground text-sm">
@@ -294,55 +396,89 @@ export function ModuleDetailPage() {
                     <p className="text-sm font-medium text-muted-foreground animate-pulse">The scanning process is ongoing.</p>
                   </div>
                 ) : allVulnerabilities.length > 0 ? (
-                  <div className="rounded-md border overflow-x-auto">
-                    <table className="w-full min-w-[600px] text-sm text-left">
-                      <thead className="bg-muted/50 text-muted-foreground">
-                        <tr>
-                          <th className="px-4 py-3 font-medium">Component</th>
-                          <th className="px-4 py-3 font-medium">Version</th>
-                          <th className="px-4 py-3 font-medium">Vulnerability ID</th>
-                          <th className="px-4 py-3 font-medium">Severity</th>
-                          <th className="px-4 py-3 font-medium">Status</th>
-                          <th className="px-4 py-3 font-medium">Fixed In</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {allVulnerabilities.map((v, i) => (
-                          <tr key={i} className="hover:bg-muted/50 transition-colors border-b">
-                            <td className="px-4 py-3 font-medium">{v.componentName}</td>
-                            <td className="px-4 py-3">{v.componentVersion}</td>
-                            <td className="px-4 py-3 font-medium">
-                              <div className="flex flex-col">
-                                <span className="text-red-500">{v.externalId}</span>
-                                {v.vulnerabilityId && <span className="text-xs text-muted-foreground font-normal">{v.vulnerabilityId}</span>}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${getSeverityColor(v.severityLevel)}`}>
-                                {v.severityLevel || "UNKNOWN"} {v.severityScore !== undefined && v.severityScore !== null ? `(${v.severityScore})` : ""}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <Select
-                                defaultValue={v.status}
-                                onValueChange={(val) => handleStatusChange(v.componentId, v.externalId, val)}
-                                disabled={updateVexStatus.isPending}
-                              >
-                                <SelectTrigger className="w-[160px] h-8 text-xs">
-                                  <SelectValue placeholder="Status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Under Investigation" className="text-xs">Under Investigation</SelectItem>
-                                  <SelectItem value="Affected" className="text-xs">Affected</SelectItem>
-                                  <SelectItem value="Not Affected" className="text-xs">Not Affected</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </td>
-                            <td className="px-4 py-3 text-green-600 dark:text-green-500 font-medium">{v.fixedVersion || "-"}</td>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 max-w-sm relative">
+                      <Search className="w-4 h-4 absolute left-3 text-muted-foreground" />
+                      <Input
+                        placeholder="Search vulnerabilities by component..."
+                        value={vulnSearchTerm}
+                        onChange={(e) => setVulnSearchTerm(e.target.value)}
+                        className="pl-9 h-9"
+                      />
+                    </div>
+                    <div className="rounded-md border overflow-x-auto">
+                      <table className="w-full min-w-[600px] text-sm text-left">
+                        <thead className="bg-muted/50 text-muted-foreground">
+                          <tr>
+                            <th className="px-4 py-3 font-medium">
+                              <button onClick={() => handleVulnSort("component")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+                                Component
+                                <ArrowUpDown className={`w-3 h-3 ${vulnSort?.key === "component" ? "text-primary" : ""}`} />
+                              </button>
+                            </th>
+                            <th className="px-4 py-3 font-medium">Version</th>
+                            <th className="px-4 py-3 font-medium">Vulnerability ID</th>
+                            <th className="px-4 py-3 font-medium">
+                              <button onClick={() => handleVulnSort("severity")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+                                Severity
+                                <ArrowUpDown className={`w-3 h-3 ${vulnSort?.key === "severity" ? "text-primary" : ""}`} />
+                              </button>
+                            </th>
+                            <th className="px-4 py-3 font-medium">
+                              <button onClick={() => handleVulnSort("status")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+                                Status
+                                <ArrowUpDown className={`w-3 h-3 ${vulnSort?.key === "status" ? "text-primary" : ""}`} />
+                              </button>
+                            </th>
+                            <th className="px-4 py-3 font-medium">Fixed In</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y">
+                          {filteredVulnerabilities.length > 0 ? (
+                            filteredVulnerabilities.map((v) => (
+                              <tr key={`${v.componentId}-${v.externalId}`} className="hover:bg-muted/50 transition-colors border-b">
+                                <td className="px-4 py-3 font-medium">{v.componentName}</td>
+                                <td className="px-4 py-3">{v.componentVersion}</td>
+                                <td className="px-4 py-3 font-medium">
+                                  <div className="flex flex-col">
+                                    <span className="text-red-500">{v.externalId}</span>
+                                    {v.vulnerabilityId && <span className="text-xs text-muted-foreground font-normal">{v.vulnerabilityId}</span>}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${getSeverityColor(v.severityLevel)}`}>
+                                    {v.severityLevel || "UNKNOWN"} {v.severityScore !== undefined && v.severityScore !== null ? `(${v.severityScore})` : ""}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <Select
+                                    value={v.status}
+                                    onValueChange={(val) => handleStatusChange(v.componentId, v.externalId, val)}
+                                    disabled={updateVexStatus.isPending}
+                                  >
+                                    <SelectTrigger className="w-[160px] h-8 text-xs">
+                                      <SelectValue placeholder="Status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Under Investigation" className="text-xs">Under Investigation</SelectItem>
+                                      <SelectItem value="Affected" className="text-xs">Affected</SelectItem>
+                                      <SelectItem value="Not Affected" className="text-xs">Not Affected</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </td>
+                                <td className="px-4 py-3 text-green-600 dark:text-green-500 font-medium">{v.fixedVersion || "-"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                                No vulnerabilities match your search.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 ) : (
                   <div className="p-8 border-2 border-dashed rounded-lg bg-muted/10 text-center text-muted-foreground text-sm">
