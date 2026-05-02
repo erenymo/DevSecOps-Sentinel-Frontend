@@ -21,3 +21,15 @@ export const useModuleComponents = (moduleId: string, isEnriching: boolean = fal
     refetchInterval: isEnriching ? 3000 : false,
   });
 };
+
+export const useUpdateVexStatus = (moduleId: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: { componentId: string; externalId: string; status: string }) =>
+      scannerApi.updateVexStatus(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["module-components", moduleId] });
+    },
+  });
+};

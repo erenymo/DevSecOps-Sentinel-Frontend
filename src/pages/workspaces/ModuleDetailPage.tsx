@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWorkspaces } from "@/features/workspaces/hooks/useWorkspaces";
 import { useModulesByWorkspace } from "@/features/workspaces/hooks/useModules";
-import { useUploadSbom, useModuleComponents } from "@/features/workspaces/hooks/useScanner";
+import { useUploadSbom, useModuleComponents, useUpdateVexStatus } from "@/features/workspaces/hooks/useScanner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   PackageOpen,
   ShieldAlert,
@@ -60,11 +61,18 @@ export function ModuleDetailPage() {
     setFile(null);
     setTimeout(() => setIsEnriching(false), 30000); // 30 sn timeout
   });
+  const updateVexStatus = useUpdateVexStatus(moduleId || "");
+
+  const handleStatusChange = (componentId: string, externalId: string, status: string) => {
+    updateVexStatus.mutate({ componentId, externalId, status });
+  };
+
   const { data: componentsData, isLoading: isComponentsLoading } = useModuleComponents(moduleId || "", isEnriching);
   const components = componentsData?.data || [];
 
   const allVulnerabilities = components.flatMap(c => 
     (c.vulnerabilities || []).map(v => ({
+      componentId: c.id,
       componentName: c.name,
       componentVersion: c.version,
       ...v
@@ -294,6 +302,7 @@ export function ModuleDetailPage() {
                           <th className="px-4 py-3 font-medium">Version</th>
                           <th className="px-4 py-3 font-medium">Vulnerability ID</th>
                           <th className="px-4 py-3 font-medium">Severity</th>
+                          <th className="px-4 py-3 font-medium">Status</th>
                           <th className="px-4 py-3 font-medium">Fixed In</th>
                         </tr>
                       </thead>
@@ -312,6 +321,22 @@ export function ModuleDetailPage() {
                               <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${getSeverityColor(v.severityLevel)}`}>
                                 {v.severityLevel || "UNKNOWN"} {v.severityScore !== undefined && v.severityScore !== null ? `(${v.severityScore})` : ""}
                               </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Select
+                                defaultValue={v.status}
+                                onValueChange={(val) => handleStatusChange(v.componentId, v.externalId, val)}
+                                disabled={updateVexStatus.isPending}
+                              >
+                                <SelectTrigger className="w-[160px] h-8 text-xs">
+                                  <SelectValue placeholder="Status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Under Investigation" className="text-xs">Under Investigation</SelectItem>
+                                  <SelectItem value="Affected" className="text-xs">Affected</SelectItem>
+                                  <SelectItem value="Not Affected" className="text-xs">Not Affected</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </td>
                             <td className="px-4 py-3 text-green-600 dark:text-green-500 font-medium">{v.fixedVersion || "-"}</td>
                           </tr>

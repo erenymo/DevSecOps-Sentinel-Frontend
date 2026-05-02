@@ -19,4 +19,9 @@ export const scannerApi = {
     apiClient
       .get<ApiResponse<Component[]>>(`/api/components/module/${moduleId}`)
       .then((res) => res.data),
+
+  updateVexStatus: (data: { componentId: string; externalId: string; status: string }) =>
+    apiClient
+      .put<ApiResponse<boolean>>("/api/components/vex-status", data)
+      .then((res) => res.data),
 };
