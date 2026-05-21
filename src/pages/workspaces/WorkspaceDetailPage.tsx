@@ -62,7 +62,7 @@ export function WorkspaceDetailPage() {
     },
     {
       label: "License Issues",
-      value: 0,
+      value: modules.reduce((acc, m) => acc + (m.licenseIssueCount || 0), 0),
       icon: FileWarning,
       color: "text-amber-500",
       bg: "bg-amber-500/10",
@@ -187,7 +187,7 @@ export function WorkspaceDetailPage() {
                         </p>
                       </div>
                       <div className="text-center">
-                        <p className="text-lg font-bold text-amber-500">0</p>
+                        <p className="text-lg font-bold text-amber-500">{mod.licenseIssueCount || 0}</p>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
                           License
                         </p>

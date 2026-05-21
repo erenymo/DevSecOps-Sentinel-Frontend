@@ -19,6 +19,7 @@ export interface Module {
   createdAt: string;
   dependencyCount?: number;
   vulnerabilityCount?: number;
+  licenseIssueCount?: number;
   lastScanDate?: string;
 }
 

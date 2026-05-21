@@ -63,6 +63,7 @@ export function ModuleDetailPage() {
 
   const [vulnSearchTerm, setVulnSearchTerm] = useState("");
   const [vulnSort, setVulnSort] = useState<{ key: "component" | "severity" | "status", direction: "asc" | "desc" } | null>({ key: "severity", direction: "desc" });
+  const [expandedVulnGroups, setExpandedVulnGroups] = useState<Set<string>>(new Set());
   
   const uploadSbom = useUploadSbom(moduleId || "", () => {
     setIsEnriching(true);
@@ -87,23 +88,59 @@ export function ModuleDetailPage() {
     }))
   );
 
-  let filteredVulnerabilities = allVulnerabilities.filter(v => 
+  const filteredVulnerabilities = allVulnerabilities.filter(v => 
     v.componentName.toLowerCase().includes(vulnSearchTerm.toLowerCase())
   );
 
+  // Group vulnerabilities by component name
+  const groupedVulnsMap = new Map<string, {
+    componentName: string;
+    componentVersion: string;
+    componentId: string;
+    vulnerabilities: typeof allVulnerabilities;
+    maxSeverityScore: number;
+    maxSeverityLevel: string;
+  }>();
+
+  filteredVulnerabilities.forEach(v => {
+    const key = v.componentName;
+    const severityScore = v.severityScore ?? 0;
+    const existing = groupedVulnsMap.get(key);
+    
+    if (existing) {
+      existing.vulnerabilities.push(v);
+      if (severityScore > existing.maxSeverityScore) {
+        existing.maxSeverityScore = severityScore;
+        existing.maxSeverityLevel = v.severityLevel || "UNKNOWN";
+      }
+    } else {
+      groupedVulnsMap.set(key, {
+        componentName: v.componentName,
+        componentVersion: v.componentVersion || "",
+        componentId: v.componentId || "",
+        vulnerabilities: [v],
+        maxSeverityScore: severityScore,
+        maxSeverityLevel: v.severityLevel || "UNKNOWN"
+      });
+    }
+  });
+
+  const groupedVulnerabilities = Array.from(groupedVulnsMap.values());
+
+  // Sort groups
   if (vulnSort) {
-    filteredVulnerabilities.sort((a, b) => {
+    groupedVulnerabilities.sort((a, b) => {
       let valA: any = "";
       let valB: any = "";
       if (vulnSort.key === "component") {
         valA = a.componentName.toLowerCase();
         valB = b.componentName.toLowerCase();
       } else if (vulnSort.key === "severity") {
-        valA = a.severityScore || 0;
-        valB = b.severityScore || 0;
+        valA = a.maxSeverityScore;
+        valB = b.maxSeverityScore;
       } else if (vulnSort.key === "status") {
-        valA = (a.status || "").toLowerCase();
-        valB = (b.status || "").toLowerCase();
+        valA = (a.vulnerabilities[0]?.status || "").toLowerCase();
+        valB = (b.vulnerabilities[0]?.status || "").toLowerCase();
       }
       
       if (valA < valB) return vulnSort.direction === "asc" ? -1 : 1;
@@ -112,13 +149,24 @@ export function ModuleDetailPage() {
     });
   }
 
+  // Sort internal vulnerabilities of each group by severityScore descending
+  groupedVulnerabilities.forEach(group => {
+    group.vulnerabilities.sort((a, b) => (b.severityScore ?? 0) - (a.severityScore ?? 0));
+  });
+
   const topLevelComponents = components.filter(
-    (c) => !c.isTransitive || !c.parentName || !components.some((p) => p.name === c.parentName)
+    (c) => !c.isTransitive
   );
 
-  let filteredTopLevelComponents = topLevelComponents.filter(c => 
-    c.name.toLowerCase().includes(depSearchTerm.toLowerCase())
-  );
+  let filteredTopLevelComponents = topLevelComponents.filter(c => {
+    const directMatches = c.name.toLowerCase().includes(depSearchTerm.toLowerCase());
+    const transitiveMatches = components.some(child => 
+      child.isTransitive && 
+      child.parentName === c.name && 
+      child.name.toLowerCase().includes(depSearchTerm.toLowerCase())
+    );
+    return directMatches || transitiveMatches;
+  });
 
   if (depSort) {
     filteredTopLevelComponents.sort((a, b) => {
@@ -167,14 +215,32 @@ export function ModuleDetailPage() {
     });
   };
 
+  const toggleVulnGroup = (compName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setExpandedVulnGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(compName)) next.delete(compName);
+      else next.add(compName);
+      return next;
+    });
+  };
+
   const renderComponentRow = (comp: Component, depth: number = 0) => {
-    const children = components.filter((c) => c.parentName === comp.name && c.id !== comp.id);
+    const children = components.filter((c) => 
+      c.isTransitive && 
+      c.parentName === comp.name &&
+      (!depSearchTerm || 
+        c.name.toLowerCase().includes(depSearchTerm.toLowerCase()) || 
+        comp.name.toLowerCase().includes(depSearchTerm.toLowerCase())
+      )
+    );
     const hasChildren = children.length > 0;
-    const isExpanded = expandedRows.has(comp.id);
+    const isExpanded = expandedRows.has(comp.id) || (!!depSearchTerm && hasChildren);
 
     return (
       <Fragment key={`row-${comp.id}`}>
-        <tr className="hover:bg-muted/50 transition-colors border-b">
+        <tr className={`transition-colors border-b ${comp.isTransitive ? 'bg-muted/20 dark:bg-muted/5 text-muted-foreground hover:bg-muted/30' : 'hover:bg-muted/50 font-medium'}`}>
           <td className="px-4 py-3 font-medium flex items-center">
             <div style={{ paddingLeft: `${depth * 1.5}rem` }} className="flex items-center">
               {hasChildren ? (
@@ -182,17 +248,19 @@ export function ModuleDetailPage() {
                   onClick={(e) => toggleRow(comp.id, e)} 
                   className="mr-2 p-1 hover:bg-muted rounded-md text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  {isExpanded ? <ChevronDown className="w-4 h-4 text-primary animate-in fade-in zoom-in duration-200" /> : <ChevronRight className="w-4 h-4 text-muted-foreground animate-in fade-in zoom-in duration-200" />}
                 </button>
               ) : (
                 <span className="w-6 mr-2" />
               )}
-              {comp.name}
+              <span className={comp.isTransitive ? 'font-normal text-xs' : 'text-sm font-semibold text-foreground'}>
+                {comp.name}
+              </span>
             </div>
           </td>
-          <td className="px-4 py-3">{comp.version}</td>
+          <td className={`px-4 py-3 ${comp.isTransitive ? 'text-xs' : 'text-sm'}`}>{comp.version}</td>
           <td className="px-4 py-3">
-            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${comp.isTransitive ? 'bg-secondary text-secondary-foreground' : 'bg-primary/10 text-primary'}`}>
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${comp.isTransitive ? 'bg-secondary/60 text-secondary-foreground' : 'bg-primary/10 text-primary'}`}>
               {comp.isTransitive ? 'Transitive' : 'Direct'}
             </span>
           </td>
@@ -200,7 +268,7 @@ export function ModuleDetailPage() {
             <div className="flex flex-wrap gap-1">
               {comp.licenseNames && comp.licenseNames.length > 0 ? (
                 comp.licenseNames.map((l, i) => (
-                  <span key={i} className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${getLicenseColor(l)}`}>
+                  <span key={i} className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-[9px] font-medium ${getLicenseColor(l)}`}>
                     {l}
                   </span>
                 ))
@@ -209,7 +277,7 @@ export function ModuleDetailPage() {
                   <Loader2 className="w-3 h-3 animate-spin text-primary" />
                 </span>
               ) : (
-                <span className="text-muted-foreground">Unknown</span>
+                <span className="text-muted-foreground text-xs">Unknown</span>
               )}
             </div>
           </td>
@@ -395,7 +463,7 @@ export function ModuleDetailPage() {
                     <Loader2 className="w-8 h-8 animate-spin text-primary" />
                     <p className="text-sm font-medium text-muted-foreground animate-pulse">The scanning process is ongoing.</p>
                   </div>
-                ) : allVulnerabilities.length > 0 ? (
+                ) : groupedVulnerabilities.length > 0 ? (
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 max-w-sm relative">
                       <Search className="w-4 h-4 absolute left-3 text-muted-foreground" />
@@ -434,48 +502,86 @@ export function ModuleDetailPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y">
-                          {filteredVulnerabilities.length > 0 ? (
-                            filteredVulnerabilities.map((v) => (
-                              <tr key={`${v.componentId}-${v.externalId}`} className="hover:bg-muted/50 transition-colors border-b">
-                                <td className="px-4 py-3 font-medium">{v.componentName}</td>
-                                <td className="px-4 py-3">{v.componentVersion}</td>
-                                <td className="px-4 py-3 font-medium">
-                                  <div className="flex flex-col">
-                                    <span className="text-red-500">{v.externalId}</span>
-                                    {v.vulnerabilityId && <span className="text-xs text-muted-foreground font-normal">{v.vulnerabilityId}</span>}
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${getSeverityColor(v.severityLevel)}`}>
-                                    {v.severityLevel || "UNKNOWN"} {v.severityScore !== undefined && v.severityScore !== null ? `(${v.severityScore})` : ""}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <Select
-                                    value={v.status}
-                                    onValueChange={(val) => handleStatusChange(v.componentId, v.externalId, val)}
-                                    disabled={updateVexStatus.isPending}
-                                  >
-                                    <SelectTrigger className="w-[160px] h-8 text-xs">
-                                      <SelectValue placeholder="Status" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="Under Investigation" className="text-xs">Under Investigation</SelectItem>
-                                      <SelectItem value="Affected" className="text-xs">Affected</SelectItem>
-                                      <SelectItem value="Not Affected" className="text-xs">Not Affected</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </td>
-                                <td className="px-4 py-3 text-green-600 dark:text-green-500 font-medium">{v.fixedVersion || "-"}</td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                                No vulnerabilities match your search.
-                              </td>
-                            </tr>
-                          )}
+                          {groupedVulnerabilities.map((group) => {
+                            const isExpanded = expandedVulnGroups.has(group.componentName) || (!!vulnSearchTerm);
+                            return (
+                              <Fragment key={group.componentName}>
+                                <tr 
+                                  onClick={(e) => toggleVulnGroup(group.componentName, e)}
+                                  className="hover:bg-muted/20 transition-colors border-b cursor-pointer bg-muted/10 dark:bg-muted/5 font-semibold"
+                                >
+                                  <td className="px-4 py-3 font-semibold flex items-center">
+                                    <div className="flex items-center">
+                                      <button 
+                                        onClick={(e) => toggleVulnGroup(group.componentName, e)} 
+                                        className="mr-2 p-1 hover:bg-muted rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                                      >
+                                        {isExpanded ? (
+                                          <ChevronDown className="w-4 h-4 text-primary animate-in fade-in zoom-in duration-200" />
+                                        ) : (
+                                          <ChevronRight className="w-4 h-4 text-muted-foreground animate-in fade-in zoom-in duration-200" />
+                                        )}
+                                      </button>
+                                      <span className="text-sm font-semibold text-foreground">
+                                        {group.componentName}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm">{group.componentVersion}</td>
+                                  <td className="px-4 py-3">
+                                    <span className="inline-flex items-center rounded-full bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400 px-2.5 py-0.5 text-xs font-semibold border border-red-200 dark:border-red-500/20">
+                                      {group.vulnerabilities.length} {group.vulnerabilities.length === 1 ? "Vulnerability" : "Vulnerabilities"}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${getSeverityColor(group.maxSeverityLevel)}`}>
+                                      {group.maxSeverityLevel} {group.maxSeverityScore > 0 ? `(${group.maxSeverityScore})` : ""}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-xs text-muted-foreground font-normal">Expand to manage VEX</td>
+                                  <td className="px-4 py-3 text-xs text-muted-foreground">-</td>
+                                </tr>
+                                
+                                {isExpanded && group.vulnerabilities.map((v) => (
+                                  <tr key={`${v.componentId}-${v.externalId}`} className="bg-muted/5 dark:bg-muted/2 hover:bg-muted/10 transition-colors border-b text-muted-foreground text-xs">
+                                    <td className="px-4 py-2.5 font-normal pl-12 flex items-center">
+                                      <span className="w-2 h-2 rounded-full bg-primary/40 mr-2" />
+                                      <span className="text-xs">{group.componentName} (Transitive)</span>
+                                    </td>
+                                    <td className="px-4 py-2.5">{v.componentVersion}</td>
+                                    <td className="px-4 py-2.5 font-medium">
+                                      <div className="flex flex-col">
+                                        <span className="text-red-500/90 font-semibold">{v.externalId}</span>
+                                        {v.vulnerabilityId && <span className="text-[10px] text-muted-foreground font-normal">{v.vulnerabilityId}</span>}
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-2.5">
+                                      <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-[9px] font-medium ${getSeverityColor(v.severityLevel)}`}>
+                                        {v.severityLevel || "UNKNOWN"} {v.severityScore !== undefined && v.severityScore !== null ? `(${v.severityScore})` : ""}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2.5">
+                                      <Select
+                                        value={v.status}
+                                        onValueChange={(val) => handleStatusChange(v.componentId || "", v.externalId || "", val || "")}
+                                        disabled={updateVexStatus.isPending}
+                                      >
+                                        <SelectTrigger className="w-[150px] h-7 text-[11px] py-0 px-2 bg-background border border-muted/80">
+                                          <SelectValue placeholder="Status" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="Under Investigation" className="text-[11px]">Under Investigation</SelectItem>
+                                          <SelectItem value="Affected" className="text-[11px]">Affected</SelectItem>
+                                          <SelectItem value="Not Affected" className="text-[11px]">Not Affected</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-green-600 dark:text-green-500 font-medium">{v.fixedVersion || "-"}</td>
+                                  </tr>
+                                ))}
+                              </Fragment>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -485,6 +591,96 @@ export function ModuleDetailPage() {
                     No vulnerabilities detected.
                   </div>
                 )
+              ) : tab.label === "License Issues" ? (
+                (() => {
+                  const licenseIssueComponents = components.filter(c => 
+                    c.licenseNames && c.licenseNames.some(l => getLicenseRisk(l) !== "low")
+                  );
+                  
+                  return isComponentsLoading || isEnriching ? (
+                    <div className="p-12 flex flex-col justify-center items-center gap-4">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                      <p className="text-sm font-medium text-muted-foreground animate-pulse">The scanning process is ongoing.</p>
+                    </div>
+                  ) : licenseIssueComponents.length > 0 ? (
+                    <div className="space-y-4">
+                      <div className="rounded-md border overflow-x-auto">
+                        <table className="w-full min-w-[600px] text-sm text-left">
+                          <thead className="bg-muted/50 text-muted-foreground">
+                            <tr>
+                              <th className="px-4 py-3 font-medium">Component</th>
+                              <th className="px-4 py-3 font-medium">Version</th>
+                              <th className="px-4 py-3 font-medium">Type</th>
+                              <th className="px-4 py-3 font-medium">License Name</th>
+                              <th className="px-4 py-3 font-medium">Risk Level</th>
+                              <th className="px-4 py-3 font-medium">Compliance Impact</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {licenseIssueComponents.map((comp) => {
+                              const highRiskLicenses = comp.licenseNames?.filter(l => getLicenseRisk(l) === "high") || [];
+                              const isHighRisk = highRiskLicenses.length > 0;
+                              const riskText = isHighRisk ? "High" : "Medium";
+                              
+                              return (
+                                <tr key={comp.id} className="hover:bg-muted/50 transition-colors border-b">
+                                  <td className="px-4 py-3 font-semibold text-foreground">{comp.name}</td>
+                                  <td className="px-4 py-3 text-muted-foreground">{comp.version}</td>
+                                  <td className="px-4 py-3">
+                                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${comp.isTransitive ? 'bg-secondary/60 text-secondary-foreground' : 'bg-primary/10 text-primary'}`}>
+                                      {comp.isTransitive ? 'Transitive' : 'Direct'}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex flex-wrap gap-1">
+                                      {comp.licenseNames?.map((l, i) => (
+                                        <span key={i} className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-[9px] font-medium ${getLicenseColor(l)}`}>
+                                          {l}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <span className={`inline-flex items-center rounded-sm px-2 py-0.5 text-[10px] font-bold border ${
+                                      isHighRisk 
+                                        ? "bg-red-500/10 text-red-500 border-red-500/20" 
+                                        : "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                                    }`}>
+                                      {riskText}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-xs">
+                                    {isHighRisk ? (
+                                      <span className="text-red-600 dark:text-red-400 font-medium">
+                                        Copyleft - Commercial distribution requires open-sourcing derived works.
+                                      </span>
+                                    ) : (
+                                      <span className="text-amber-600 dark:text-amber-400 font-medium">
+                                        Weak Copyleft - Modifications to this library itself must be open-sourced.
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-8 border border-dashed rounded-lg bg-green-500/5 dark:bg-green-500/2 text-center text-green-600 dark:text-green-400 text-sm font-semibold flex flex-col items-center justify-center gap-3 animate-in fade-in zoom-in duration-300">
+                      <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                        <ShieldAlert className="w-6 h-6 text-green-500" />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-semibold text-foreground mb-1">Compliance Shield Clear</h4>
+                        <p className="text-xs text-muted-foreground max-w-md font-normal mx-auto">
+                          No copyleft or restrictive licenses detected. All dependency licenses comply with low-risk commercial policies.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()
               ) : (
                 <div className="p-8 border-2 border-dashed rounded-lg bg-muted/10 text-center text-muted-foreground text-sm">
                   No data available yet.
