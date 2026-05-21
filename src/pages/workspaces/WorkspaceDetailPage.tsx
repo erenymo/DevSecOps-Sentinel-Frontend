@@ -45,34 +45,69 @@ export function WorkspaceDetailPage() {
     ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(Math.max(...lastScanDates.map(d => new Date(d!).getTime()))))
     : "—";
 
+  const wsThreatScore = workspace?.threatScore !== undefined && workspace?.threatScore !== null
+    ? workspace.threatScore
+    : (modules.length > 0 && modules.some(m => m.threatScore !== undefined && m.threatScore !== null)
+        ? Math.max(...modules.map(m => m.threatScore || 0).filter(Boolean)) 
+        : -1);
+
+  const wsLicenseScore = workspace?.licenseScore !== undefined && workspace?.licenseScore !== null
+    ? workspace.licenseScore
+    : (modules.length > 0 && modules.some(m => m.licenseScore !== undefined && m.licenseScore !== null)
+        ? Math.min(...modules.map(m => m.licenseScore ?? 100)) 
+        : -1);
+
+  const wsThreatScoreVal = wsThreatScore >= 0 ? `${wsThreatScore.toFixed(1)}/10` : "—";
+  const wsLicenseScoreVal = (wsLicenseScore >= 0 && wsLicenseScore <= 100) ? `${wsLicenseScore}%` : "—";
+
   const summaryCards = [
     {
       label: "Total Modules",
       value: modules.length,
       icon: Boxes,
-      color: "text-blue-500",
+      iconColor: "text-blue-500",
       bg: "bg-blue-500/10",
+      valColor: "text-foreground",
     },
     {
       label: "Vulnerabilities",
       value: modules.reduce((acc, m) => acc + (m.vulnerabilityCount || 0), 0),
       icon: ShieldAlert,
-      color: "text-red-500",
+      iconColor: "text-red-500",
       bg: "bg-red-500/10",
+      valColor: "text-foreground",
     },
     {
       label: "License Issues",
       value: modules.reduce((acc, m) => acc + (m.licenseIssueCount || 0), 0),
       icon: FileWarning,
-      color: "text-amber-500",
+      iconColor: "text-amber-500",
       bg: "bg-amber-500/10",
+      valColor: "text-foreground",
+    },
+    {
+      label: "Threat Score",
+      value: wsThreatScoreVal,
+      icon: ShieldAlert,
+      iconColor: wsThreatScore >= 7.0 ? "text-red-500" : wsThreatScore >= 4.0 ? "text-amber-500" : wsThreatScore >= 0 ? "text-green-500" : "text-muted-foreground",
+      bg: wsThreatScore >= 7.0 ? "bg-red-500/10" : wsThreatScore >= 4.0 ? "bg-amber-500/10" : wsThreatScore >= 0 ? "bg-green-500/10" : "bg-muted/10",
+      valColor: wsThreatScore >= 7.0 ? "text-red-600 dark:text-red-400" : wsThreatScore >= 4.0 ? "text-amber-600 dark:text-amber-400" : wsThreatScore >= 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground",
+    },
+    {
+      label: "Compliance Score",
+      value: wsLicenseScoreVal,
+      icon: FileWarning,
+      iconColor: wsLicenseScore >= 80 ? "text-green-500" : wsLicenseScore >= 50 ? "text-amber-500" : wsLicenseScore >= 0 ? "text-red-500" : "text-muted-foreground",
+      bg: wsLicenseScore >= 80 ? "bg-green-500/10" : wsLicenseScore >= 50 ? "bg-amber-500/10" : wsLicenseScore >= 0 ? "bg-red-500/10" : "bg-muted/10",
+      valColor: wsLicenseScore >= 80 ? "text-green-600 dark:text-green-400" : wsLicenseScore >= 50 ? "text-amber-600 dark:text-amber-400" : wsLicenseScore >= 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground",
     },
     {
       label: "Last Scan",
       value: latestScanDate,
       icon: Clock,
-      color: "text-emerald-500",
+      iconColor: "text-emerald-500",
       bg: "bg-emerald-500/10",
+      valColor: "text-foreground",
     },
   ];
 
@@ -98,18 +133,18 @@ export function WorkspaceDetailPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {summaryCards.map((card) => (
           <Card key={card.label} className="border bg-card shadow-sm">
             <CardContent className="p-4 flex items-center gap-4">
               <div
-                className={`w-10 h-10 rounded-lg flex items-center justify-center ${card.bg}`}
+                className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${card.bg}`}
               >
-                <card.icon className={`h-5 w-5 ${card.color}`} />
+                <card.icon className={`h-5 w-5 ${card.iconColor}`} />
               </div>
-              <div>
-                <p className="text-2xl font-bold">{card.value}</p>
-                <p className="text-xs text-muted-foreground">{card.label}</p>
+              <div className="min-w-0">
+                <p className={`text-2xl font-bold truncate ${card.valColor}`}>{card.value}</p>
+                <p className="text-[10px] text-muted-foreground font-semibold">{card.label}</p>
               </div>
             </CardContent>
           </Card>
@@ -173,26 +208,57 @@ export function WorkspaceDetailPage() {
                     </div>
 
                     {/* Right: Stats */}
-                    <div className="flex items-center gap-4 sm:gap-6 text-sm">
-                      <div className="text-center">
-                        <p className="text-lg font-bold">{mod.dependencyCount || 0}</p>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                    <div className="flex items-center gap-3 sm:gap-4 text-sm flex-wrap sm:flex-nowrap">
+                      <div className="text-center min-w-[36px]">
+                        <p className="text-base font-bold text-foreground">{mod.dependencyCount || 0}</p>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">
                           Deps
                         </p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-red-500">{mod.vulnerabilityCount || 0}</p>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                      <div className="text-center min-w-[36px]">
+                        <p className="text-base font-bold text-red-500">{mod.vulnerabilityCount || 0}</p>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">
                           Vulns
                         </p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-amber-500">{mod.licenseIssueCount || 0}</p>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                      <div className="text-center min-w-[36px]">
+                        <p className="text-base font-bold text-amber-500">{mod.licenseIssueCount || 0}</p>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">
                           License
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
+
+                      {mod.threatScore !== undefined && mod.threatScore !== null && (
+                        <div className="text-center bg-red-500/5 dark:bg-red-500/10 rounded-md px-2 py-0.5 border border-red-500/20 min-w-[50px] shrink-0">
+                          <p className={`text-xs font-black ${
+                            mod.threatScore >= 7.0 ? "text-red-600 dark:text-red-400" :
+                            mod.threatScore >= 4.0 ? "text-amber-600 dark:text-amber-400" :
+                            "text-green-600 dark:text-green-400"
+                          }`}>
+                            {mod.threatScore.toFixed(1)}/10
+                          </p>
+                          <p className="text-[8px] text-muted-foreground uppercase tracking-wider font-bold">
+                            Threat
+                          </p>
+                        </div>
+                      )}
+
+                      {mod.licenseScore !== undefined && mod.licenseScore !== null && (
+                        <div className="text-center bg-emerald-500/5 dark:bg-emerald-500/10 rounded-md px-2 py-0.5 border border-emerald-500/20 min-w-[50px] shrink-0">
+                          <p className={`text-xs font-black ${
+                            mod.licenseScore >= 80 ? "text-green-600 dark:text-green-400" :
+                            mod.licenseScore >= 50 ? "text-amber-600 dark:text-amber-400" :
+                            "text-red-600 dark:text-red-400"
+                          }`}>
+                            {mod.licenseScore}%
+                          </p>
+                          <p className="text-[8px] text-muted-foreground uppercase tracking-wider font-bold">
+                            Compliance
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 shrink-0">
                         <Button
                           variant="ghost"
                           size="icon"

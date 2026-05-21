@@ -3,6 +3,8 @@ export interface Workspace {
   name: string;
   description?: string;
   createdAt: string;
+  threatScore?: number;
+  licenseScore?: number;
 }
 
 export interface WorkspaceRequest {
@@ -21,6 +23,8 @@ export interface Module {
   vulnerabilityCount?: number;
   licenseIssueCount?: number;
   lastScanDate?: string;
+  threatScore?: number;
+  licenseScore?: number;
 }
 
 export interface ModuleRequest {
@@ -43,6 +47,34 @@ export interface ComponentVulnerability {
 export interface PackageLicenseInsight {
   riskExplanationForManagement: string;
   recommendedAlternativesJson: string;
+}
+
+// ─── Vulnerability AI Insight types ──────────────────────────────────────────
+
+export interface VulnerabilityAlternativePackage {
+  packageName: string;
+  licenseType: string;
+  reason: string;
+  popularity: string;
+}
+
+export interface PackageVulnerabilityInsight {
+  packageName: string;
+  /** Yonetimsel duzey risk ozeti, tum CVE'leri kapsayan, Turkce */
+  aiRiskSummaryForManagement: string;
+  /** Tavsiye edilen guvenli surumu */
+  fixedVersionRecommendation: string;
+  /** AI VEX tavsiyesi — sadece gorunum amacli */
+  recommendedVexStatus: string;
+  alternatives: VulnerabilityAlternativePackage[];
+}
+
+export interface VulnerabilityAiInsight {
+  /** CTO/CISO için 2-3 cümlelik üst düzey özet (Türkçe) */
+  executiveActionPlan: string;
+  /** Genel sistem tehdit skoru (0-10) */
+  systemCriticalityScore: number;
+  packageInsights: PackageVulnerabilityInsight[];
 }
 
 export interface Component {

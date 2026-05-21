@@ -70,3 +70,25 @@ export const useAnalyzeLicenseInsights = (moduleId: string) => {
     },
   });
 };
+
+export const useVulnerabilityInsights = (moduleId: string) => {
+  return useQuery({
+    queryKey: ["vulnerability-insights", moduleId],
+    queryFn: () => scannerApi.analyzeVulnerabilityInsights(moduleId),
+    enabled: !!moduleId,
+    staleTime: 1000 * 60 * 5, // 5 minutes cache
+  });
+};
+
+export const useAnalyzeVulnerabilityInsights = (moduleId: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => scannerApi.analyzeVulnerabilityInsights(moduleId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["vulnerability-insights", moduleId] });
+      queryClient.invalidateQueries({ queryKey: ["module-components", moduleId] });
+    },
+  });
+};
+

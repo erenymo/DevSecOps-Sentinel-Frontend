@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWorkspaces } from "@/features/workspaces/hooks/useWorkspaces";
 import { useModulesByWorkspace } from "@/features/workspaces/hooks/useModules";
-import { useUploadSbom, useModuleComponents, useUpdateVexStatus, useScanStatus, useAnalyzeLicenseInsights } from "@/features/workspaces/hooks/useScanner";
+import { useUploadSbom, useModuleComponents, useUpdateVexStatus, useScanStatus, useAnalyzeLicenseInsights, useAnalyzeVulnerabilityInsights, useVulnerabilityInsights } from "@/features/workspaces/hooks/useScanner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   PackageOpen,
@@ -20,9 +20,10 @@ import {
   ArrowUpDown,
   Search,
   Sparkles,
-  Info
+  Info,
+  ExternalLink
 } from "lucide-react";
-import type { Module, Component } from "@/features/workspaces/types";
+import type { Module, Component, VulnerabilityAiInsight, PackageVulnerabilityInsight } from "@/features/workspaces/types";
 
 const getLicenseRisk = (name: string): "high" | "medium" | "low" => {
   const upper = name.toUpperCase();
@@ -65,6 +66,7 @@ export function ModuleDetailPage() {
   const [depSort, setDepSort] = useState<{ key: "name" | "license", direction: "asc" | "desc" } | null>({ key: "name", direction: "asc" });
 
   const [vulnSearchTerm, setVulnSearchTerm] = useState("");
+  const [vulnSeverityFilter, setVulnSeverityFilter] = useState<string>("all");
   const [vulnSort, setVulnSort] = useState<{ key: "component" | "severity" | "status", direction: "asc" | "desc" } | null>({ key: "severity", direction: "desc" });
   const [expandedVulnGroups, setExpandedVulnGroups] = useState<Set<string>>(new Set());
   const [expandedLicenseRows, setExpandedLicenseRows] = useState<Set<string>>(new Set());
@@ -86,7 +88,11 @@ export function ModuleDetailPage() {
   const isEnrichingLicenses = scanStatus?.isDependenciesParsed ? !scanStatus.isLicenseEnrichmentCompleted : false;
   const isEnrichingVulns = scanStatus?.isDependenciesParsed ? !scanStatus.isVulnEnrichmentCompleted : false;
 
+  const { data: vulnAiInsightResult } = useVulnerabilityInsights(moduleId || "");
+  const vulnAiInsight = vulnAiInsightResult?.data;
+
   const analyzeLicenseInsights = useAnalyzeLicenseInsights(moduleId || "");
+  const analyzeVulnerabilityInsights = useAnalyzeVulnerabilityInsights(moduleId || "");
 
   const renderLoadingUI = () => (
     <div className="p-12 flex flex-col justify-center items-center gap-4 max-w-md mx-auto mt-4">
@@ -96,8 +102,8 @@ export function ModuleDetailPage() {
         <div className="w-3 h-3 bg-primary rounded-full animate-bounce"></div>
       </div>
       <div className="space-y-1 text-center w-full mt-2">
-        <p className="text-sm font-semibold text-foreground">Veri Çekiliyor / Analiz Sürüyor</p>
-        <p className="text-xs font-medium text-muted-foreground">Sonuçlar yüklenirken lütfen bekleyin...</p>
+        <p className="text-sm font-semibold text-foreground">Fetching Data / Analysis in Progress</p>
+        <p className="text-xs font-medium text-muted-foreground">Please wait while results are loading...</p>
       </div>
     </div>
   );
@@ -121,9 +127,11 @@ export function ModuleDetailPage() {
 
   const allVulnerabilities = Array.from(uniqueVulnsMapGlobal.values());
 
-  const filteredVulnerabilities = allVulnerabilities.filter(v => 
-    v.componentName.toLowerCase().includes(vulnSearchTerm.toLowerCase())
-  );
+  const filteredVulnerabilities = allVulnerabilities.filter(v => {
+    const matchesSearch = v.componentName.toLowerCase().includes(vulnSearchTerm.toLowerCase());
+    const matchesSeverity = vulnSeverityFilter === "all" || v.severityLevel?.toUpperCase() === vulnSeverityFilter.toUpperCase();
+    return matchesSearch && matchesSeverity;
+  });
 
   // Group vulnerabilities by component name
   const groupedVulnsMap = new Map<string, {
@@ -460,9 +468,9 @@ export function ModuleDetailPage() {
                         className="pl-9 h-9"
                       />
                     </div>
-                    <div className="rounded-md border overflow-x-auto">
-                      <table className="w-full min-w-[600px] text-sm text-left">
-                        <thead className="bg-muted/50 text-muted-foreground">
+                    <div className="rounded-md border overflow-auto max-h-[620px] shadow-sm">
+                      <table className="w-full min-w-[600px] text-sm text-left border-collapse">
+                        <thead className="sticky top-0 bg-muted/95 dark:bg-slate-900/95 backdrop-blur-sm text-muted-foreground z-10 shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
                           <tr>
                             <th className="px-4 py-3 font-medium">
                               <button onClick={() => handleDepSort("name")} className="flex items-center gap-1 hover:text-foreground transition-colors">
@@ -503,15 +511,138 @@ export function ModuleDetailPage() {
                 isComponentsLoading || isEnrichingVulns ? (
                   renderLoadingUI()
                 ) : groupedVulnerabilities.length > 0 ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 max-w-sm relative">
-                      <Search className="w-4 h-4 absolute left-3 text-muted-foreground" />
-                      <Input
-                        placeholder="Search vulnerabilities by component..."
-                        value={vulnSearchTerm}
-                        onChange={(e) => setVulnSearchTerm(e.target.value)}
-                        className="pl-9 h-9"
-                      />
+                <div className="space-y-4">
+                  {/* ─── AI Dashboard Card ──────────────────────────────── */}
+                  {vulnAiInsight ? (
+                    (() => {
+                      const score = Math.min(10, Math.max(0, vulnAiInsight.systemCriticalityScore));
+                      const radius = 28;
+                      const circumference = 2 * Math.PI * radius;
+                      const strokeDashoffset = circumference - (score / 10) * circumference;
+                      const scoreColor = score <= 3
+                        ? 'text-green-500'
+                        : score <= 6
+                        ? 'text-amber-500'
+                        : 'text-red-500';
+                      const gradientFrom = score <= 3 ? 'from-green-500/10' : score <= 6 ? 'from-amber-500/10' : 'from-red-500/10';
+                      return (
+                        <Card className={`bg-gradient-to-r ${gradientFrom} via-red-500/5 to-purple-500/10 border-red-500/20 shadow-none`}>
+                          <CardContent className="p-0 flex flex-col sm:flex-row items-stretch">
+                            {/* Score donut */}
+                            <div className="w-full sm:w-[20%] border-b sm:border-b-0 sm:border-r border-red-500/20 p-4 flex flex-col items-center justify-center gap-2 bg-background/40">
+                              <div className="relative w-20 h-20">
+                                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 72 72">
+                                  <circle cx="36" cy="36" r="28" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-muted/30" />
+                                  <circle cx="36" cy="36" r="28" stroke="currentColor" strokeWidth="6" fill="transparent"
+                                    strokeDasharray={circumference}
+                                    strokeDashoffset={strokeDashoffset}
+                                    className={`${scoreColor} transition-all duration-1000 ease-out`}
+                                    strokeLinecap="round" />
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                  <span className={`text-2xl font-black ${scoreColor}`}>{score.toFixed(1)}</span>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-center">Threat Score</span>
+                            </div>
+                             {/* Executive Plan */}
+                            <div className="w-full sm:w-[80%] p-5 flex items-start gap-4">
+                              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                <Sparkles className="w-5 h-5 text-red-500" />
+                              </div>
+                              <div className="flex-1 space-y-3">
+                                <div>
+                                  <h4 className="text-sm font-semibold text-foreground mb-1.5 flex items-center gap-2">
+                                    AI Threat Analysis
+                                    <span className="inline-flex items-center rounded-full bg-red-500/20 text-red-500 px-2 py-0.5 text-[10px] font-bold">CTO/CISO</span>
+                                  </h4>
+                                  <p className="text-xs text-muted-foreground leading-relaxed font-medium">
+                                    {vulnAiInsight.executiveActionPlan}
+                                  </p>
+                                </div>
+                                <div className="border-t border-red-500/10 pt-2.5">
+                                  <div className="flex flex-wrap gap-2">
+                                    <span className="inline-flex items-center rounded-full bg-red-500/10 text-red-500 px-2.5 py-0.5 text-[9px] font-bold border border-red-500/20">
+                                      Total CVEs: {allVulnerabilities.length}
+                                    </span>
+                                    <span className="inline-flex items-center rounded-full bg-amber-500/10 text-amber-500 px-2.5 py-0.5 text-[9px] font-bold border border-amber-500/20">
+                                      Critical/High: {allVulnerabilities.filter(v => v.severityLevel?.toUpperCase() === "CRITICAL" || v.severityLevel?.toUpperCase() === "HIGH").length}
+                                    </span>
+                                    <span className="inline-flex items-center rounded-full bg-indigo-500/10 text-indigo-500 px-2.5 py-0.5 text-[9px] font-bold border border-indigo-500/20">
+                                      Vulnerable Packages: {groupedVulnerabilities.length}
+                                    </span>
+                                  </div>
+                                  <div className="mt-3 space-y-1.5">
+                                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Vulnerability Distribution by Component</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {groupedVulnerabilities.map(g => (
+                                        <span key={g.componentName} className="inline-flex items-center rounded bg-muted/60 px-1.5 py-0.5 text-[9px] font-medium text-foreground border border-border/40">
+                                          {g.componentName} ({g.vulnerabilities.length})
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })()
+                  ) : (
+                    <div className="flex items-center justify-between bg-gradient-to-r from-red-500/5 to-purple-500/5 border border-red-500/20 rounded-lg p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-red-500/10 flex items-center justify-center shrink-0">
+                          <Sparkles className="w-4 h-4 text-red-500" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">AI Threat Analysis</p>
+                          <p className="text-xs text-muted-foreground">Analyze all vulnerable packages to generate VEX triage recommendations and secure alternatives.</p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white shrink-0"
+                        onClick={() =>
+                          analyzeVulnerabilityInsights.mutate()
+                        }
+                        disabled={analyzeVulnerabilityInsights.isPending}
+                      >
+                        {analyzeVulnerabilityInsights.isPending ? (
+                          <><Loader2 className="w-3 h-3 mr-2 animate-spin" />Analyzing...</>
+                        ) : (
+                          <><Sparkles className="w-3 h-3 mr-2" />Analyze</>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:max-w-xl">
+                      <div className="relative w-full sm:w-2/3">
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          placeholder="Search vulnerabilities by component..."
+                          value={vulnSearchTerm}
+                          onChange={(e) => setVulnSearchTerm(e.target.value)}
+                          className="pl-9 h-9 w-full"
+                        />
+                      </div>
+                      <div className="w-full sm:w-1/3">
+                        <Select
+                          value={vulnSeverityFilter}
+                          onValueChange={(val) => setVulnSeverityFilter(val || "all")}
+                        >
+                          <SelectTrigger className="h-9 w-full bg-background border">
+                            <SelectValue placeholder="All Severities" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Severities</SelectItem>
+                            <SelectItem value="CRITICAL">Critical</SelectItem>
+                            <SelectItem value="HIGH">High</SelectItem>
+                            <SelectItem value="MEDIUM">Medium</SelectItem>
+                            <SelectItem value="LOW">Low</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     <div className="rounded-md border overflow-x-auto">
                       <table className="w-full min-w-[600px] text-sm text-left">
@@ -561,8 +692,13 @@ export function ModuleDetailPage() {
                                           <ChevronRight className="w-4 h-4 text-muted-foreground animate-in fade-in zoom-in duration-200" />
                                         )}
                                       </button>
-                                      <span className="text-sm font-semibold text-foreground">
+                                      <span className="text-sm font-semibold text-foreground flex items-center gap-2">
                                         {group.componentName}
+                                        {vulnAiInsight?.packageInsights?.some(pi => pi.packageName?.toLowerCase() === group.componentName?.toLowerCase()) && (
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 text-red-500 px-2 py-0.5 text-[9px] font-bold border border-red-500/20">
+                                            <Sparkles className="w-2.5 h-2.5" /> AI Analysis Ready
+                                          </span>
+                                        )}
                                       </span>
                                     </div>
                                   </td>
@@ -581,16 +717,96 @@ export function ModuleDetailPage() {
                                   <td className="px-4 py-3 text-xs text-muted-foreground">-</td>
                                 </tr>
                                 
+                                {isExpanded && vulnAiInsight && (() => {
+                                  const pkgInsight: PackageVulnerabilityInsight | undefined =
+                                    vulnAiInsight.packageInsights?.find(
+                                      (pi) => pi.packageName?.toLowerCase() === group.componentName?.toLowerCase()
+                                    );
+                                  if (!pkgInsight) return null;
+                                  return (
+                                    <tr className="bg-muted/5 dark:bg-muted/2 border-b">
+                                      <td colSpan={6} className="px-6 py-5">
+                                        <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                          <div className="bg-background rounded-lg border p-4 shadow-sm">
+                                            <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+                                              <Info className="w-4 h-4 text-indigo-500" /> Management Risk Summary
+                                            </h5>
+                                            <p className="text-sm text-foreground/90 leading-relaxed font-medium">
+                                              {pkgInsight.aiRiskSummaryForManagement}
+                                            </p>
+                                            <div className="mt-3 flex flex-wrap items-center gap-3">
+                                              {pkgInsight.fixedVersionRecommendation && (
+                                                <div className="flex items-center gap-2">
+                                                  <span className="text-[11px] text-muted-foreground font-semibold">Recommended Fix:</span>
+                                                  <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold bg-green-500/10 text-green-600 border border-green-500/20">
+                                                    v{pkgInsight.fixedVersionRecommendation}
+                                                  </span>
+                                                </div>
+                                              )}
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-[11px] text-muted-foreground font-semibold">AI VEX Recommendation:</span>
+                                                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold border ${
+                                                  pkgInsight.recommendedVexStatus === "Affected"
+                                                    ? "bg-red-500/10 text-red-500 border-red-500/20"
+                                                    : pkgInsight.recommendedVexStatus === "Not_Affected"
+                                                    ? "bg-green-500/10 text-green-600 border-green-500/20"
+                                                    : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                                }`}>
+                                                  {pkgInsight.recommendedVexStatus}
+                                                </span>
+                                                <span className="text-[10px] text-muted-foreground/70 italic">(Advisory only)</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                          {pkgInsight.alternatives && pkgInsight.alternatives.length > 0 && (
+                                            <div>
+                                              <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
+                                                <PackageOpen className="w-4 h-4 text-green-500" /> Recommended MIT / Apache Alternatives
+                                              </h5>
+                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {pkgInsight.alternatives.map((alt, i) => (
+                                                  <Card key={i} className="bg-background shadow-sm border-dashed hover:border-green-500/30 transition-colors">
+                                                    <CardContent className="p-4 flex flex-col gap-2">
+                                                      <div className="flex justify-between items-start">
+                                                        <span className="font-bold text-sm text-primary">{alt.packageName}</span>
+                                                        <span className="inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-bold bg-green-500/10 text-green-600 border border-green-500/20">
+                                                          {alt.licenseType}
+                                                        </span>
+                                                      </div>
+                                                      <p className="text-xs text-muted-foreground leading-relaxed">{alt.reason}</p>
+                                                      {alt.popularity && (
+                                                        <p className="text-[10px] text-muted-foreground/70 font-medium">📦 {alt.popularity}</p>
+                                                      )}
+                                                    </CardContent>
+                                                  </Card>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })()}
+
                                 {isExpanded && group.vulnerabilities.map((v) => (
                                   <tr key={`${v.componentId}-${v.externalId}`} className="bg-muted/5 dark:bg-muted/2 hover:bg-muted/10 transition-colors border-b text-muted-foreground text-xs">
                                     <td className="px-4 py-2.5 font-normal pl-12 flex items-center">
                                       <span className="w-2 h-2 rounded-full bg-primary/40 mr-2" />
-                                      <span className="text-xs">{group.componentName} (Transitive)</span>
+                                      <span className="text-xs">{group.componentName}</span>
                                     </td>
                                     <td className="px-4 py-2.5">{v.componentVersion}</td>
                                     <td className="px-4 py-2.5 font-medium">
                                       <div className="flex flex-col">
-                                        <span className="text-red-500/90 font-semibold">{v.externalId}</span>
+                                         <a
+                                           href={`https://osv.dev/vulnerability/${v.externalId}`}
+                                           target="_blank"
+                                           rel="noopener noreferrer"
+                                           className="text-red-500/90 hover:text-red-600 hover:underline font-semibold inline-flex items-center gap-1 group/link transition-colors"
+                                         >
+                                           {v.externalId}
+                                           <ExternalLink className="w-3 h-3 opacity-60 group-hover/link:opacity-100 transition-opacity shrink-0" />
+                                         </a>
                                         {v.vulnerabilityId && <span className="text-[10px] text-muted-foreground font-normal">{v.vulnerabilityId}</span>}
                                       </div>
                                     </td>
@@ -684,21 +900,21 @@ export function ModuleDetailPage() {
                               </h4>
                               <p className="text-xs text-muted-foreground leading-relaxed font-medium">
                                 {score >= 80 
-                                  ? "Projenizin lisans uyumluluğu oldukça iyi durumda. Kritik bir hukuki veya ticari risk tespit edilmedi. Yapay zeka ile incelenen bileşenler genel politikalarınıza uygun görünmektedir."
+                                  ? "Your project's license compliance is in excellent standing. No critical legal or commercial risks were detected. Components analyzed by AI match your organizational policies."
                                   : score >= 50
-                                  ? "Projenizde bazı copyleft veya inceleme gerektiren lisanslar tespit edildi. Ticari dağıtım veya kapalı kaynak kullanım senaryolarına karşı tablodaki lisanslı paketleri detaylı olarak gözden geçirmeniz tavsiye edilir."
-                                  : "Projenizdeki bileşenlerde yüksek riskli lisanslar tespit edildi! Bu durum projenizin ticari lisanslanmasını veya kapalı kaynak kodlu yapısını ciddi şekilde tehdit edebilir. Derhal alternatifleri inceleyerek aksiyon alın."}
+                                  ? "Some copyleft or review-required licenses were detected in your project. It is advised to review the licensed packages in the table for commercial distribution or closed-source usage scenarios."
+                                  : "High-risk licenses detected in your project's components! This can severely impact the commercial licensing or closed-source nature of your project. Take immediate action by reviewing alternatives."}
                               </p>
                               <div className="mt-3 flex items-center gap-4 text-[11px] text-muted-foreground/80 font-medium">
-                                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-red-500/50"></span> {licenseIssueComponents.filter(c => c.licenseNames?.some(l => getLicenseRisk(l) === "high")).length} Yüksek Risk</div>
-                                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-500/50"></span> {licenseIssueComponents.filter(c => c.licenseNames?.some(l => getLicenseRisk(l) === "medium") && !c.licenseNames?.some(l => getLicenseRisk(l) === "high")).length} Orta Risk</div>
-                                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500/50"></span> {licenseIssueComponents.filter(c => c.aiInsight).length} AI Analizi Hazır</div>
+                                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-red-500/50"></span> {licenseIssueComponents.filter(c => c.licenseNames?.some(l => getLicenseRisk(l) === "high")).length} High Risk</div>
+                                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-500/50"></span> {licenseIssueComponents.filter(c => c.licenseNames?.some(l => getLicenseRisk(l) === "medium") && !c.licenseNames?.some(l => getLicenseRisk(l) === "high")).length} Medium Risk</div>
+                                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500/50"></span> {licenseIssueComponents.filter(c => c.aiInsight).length} AI Analysis Ready</div>
                               </div>
                               
                               {licenseIssueComponents.some(c => !c.aiInsight) && (
                                 <div className="mt-4 flex items-center justify-between bg-background/50 border border-indigo-500/10 rounded-md p-3">
                                   <div className="text-xs text-muted-foreground">
-                                    <span className="font-semibold text-indigo-600 dark:text-indigo-400">{licenseIssueComponents.filter(c => !c.aiInsight).length} paket</span> için AI analizi bekleniyor.
+                                    AI analysis pending for <span className="font-semibold text-indigo-600 dark:text-indigo-400">{licenseIssueComponents.filter(c => !c.aiInsight).length} packages</span>.
                                   </div>
                                   <Button 
                                     size="sm" 
@@ -707,9 +923,9 @@ export function ModuleDetailPage() {
                                     disabled={analyzeLicenseInsights.isPending}
                                   >
                                     {analyzeLicenseInsights.isPending ? (
-                                      <><Loader2 className="w-3 h-3 mr-2 animate-spin" /> Analiz Ediliyor...</>
+                                      <><Loader2 className="w-3 h-3 mr-2 animate-spin" /> Analyzing...</>
                                     ) : (
-                                      <><Sparkles className="w-3 h-3 mr-2" /> Analiz Et</>
+                                      <><Sparkles className="w-3 h-3 mr-2" /> Analyze</>
                                     )}
                                   </Button>
                                 </div>
@@ -751,7 +967,7 @@ export function ModuleDetailPage() {
                                         )}
                                       </button>
                                     ) : (
-                                      <span className="text-[9px] leading-tight font-semibold text-muted-foreground/60 select-none block text-center">Analiz<br/>Bekleniyor</span>
+                                      <span className="text-[9px] leading-tight font-semibold text-muted-foreground/60 select-none block text-center">Analysis<br/>Pending</span>
                                     )}
                                   </td>
                                   <td className="px-4 py-3 font-semibold text-foreground">{comp.name}</td>
@@ -797,7 +1013,7 @@ export function ModuleDetailPage() {
                                       <div className="space-y-5 animate-in fade-in slide-in-from-top-2 duration-300">
                                         <div className="bg-background rounded-lg border p-4 shadow-sm">
                                           <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
-                                            <Info className="w-4 h-4 text-indigo-500" /> Yönetimsel Risk Özeti
+                                            <Info className="w-4 h-4 text-indigo-500" /> Management Risk Summary
                                           </h5>
                                           <p className="text-sm text-foreground/90 leading-relaxed font-medium">
                                             {comp.aiInsight.riskExplanationForManagement}
@@ -805,7 +1021,7 @@ export function ModuleDetailPage() {
                                         </div>
                                         <div>
                                           <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
-                                            <PackageOpen className="w-4 h-4 text-green-500" /> Önerilen MIT / Apache Alternatifleri
+                                            <PackageOpen className="w-4 h-4 text-green-500" /> Recommended MIT / Apache Alternatives
                                           </h5>
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {(() => {

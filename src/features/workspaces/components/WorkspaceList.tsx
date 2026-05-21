@@ -60,6 +60,8 @@ export function WorkspaceList() {
           <TableRow>
             <TableHead className="font-semibold">Workspace Name</TableHead>
             <TableHead className="font-semibold hidden sm:table-cell">Description</TableHead>
+            <TableHead className="font-semibold">Threat Score</TableHead>
+            <TableHead className="font-semibold">License Compliance</TableHead>
             <TableHead className="font-semibold hidden md:table-cell">Created At</TableHead>
             <TableHead className="text-right font-semibold">Actions</TableHead>
           </TableRow>
@@ -79,6 +81,36 @@ export function WorkspaceList() {
               </TableCell>
               <TableCell className="text-muted-foreground hidden sm:table-cell">
                 {workspace.description || "-"}
+              </TableCell>
+              <TableCell onClick={(e) => e.stopPropagation()}>
+                {workspace.threatScore !== undefined && workspace.threatScore !== null ? (
+                  <div className="inline-flex items-center bg-red-500/5 dark:bg-red-500/10 rounded-md px-2.5 py-0.5 border border-red-500/20">
+                    <span className={`text-xs font-black ${
+                      workspace.threatScore >= 7.0 ? "text-red-600 dark:text-red-400" :
+                      workspace.threatScore >= 4.0 ? "text-amber-600 dark:text-amber-400" :
+                      "text-green-600 dark:text-green-400"
+                    }`}>
+                      {workspace.threatScore.toFixed(1)}/10
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">-</span>
+                )}
+              </TableCell>
+              <TableCell onClick={(e) => e.stopPropagation()}>
+                {workspace.licenseScore !== undefined && workspace.licenseScore !== null ? (
+                  <div className="inline-flex items-center bg-emerald-500/5 dark:bg-emerald-500/10 rounded-md px-2.5 py-0.5 border border-emerald-500/20">
+                    <span className={`text-xs font-black ${
+                      workspace.licenseScore >= 80 ? "text-green-600 dark:text-green-400" :
+                      workspace.licenseScore >= 50 ? "text-amber-600 dark:text-amber-400" :
+                      "text-red-600 dark:text-red-400"
+                    }`}>
+                      {workspace.licenseScore}%
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">-</span>
+                )}
               </TableCell>
               <TableCell className="text-muted-foreground text-xs hidden md:table-cell">
                 {format(new Date(workspace.createdAt), "PPP")}

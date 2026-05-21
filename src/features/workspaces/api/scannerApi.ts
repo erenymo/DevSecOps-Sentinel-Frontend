@@ -1,6 +1,6 @@
 import apiClient from "@/lib/axios";
 import type { ApiResponse } from "@/types/api";
-import type { Component } from "../types";
+import type { Component, VulnerabilityAiInsight } from "../types";
 
 export const scannerApi = {
   uploadSbom: (moduleId: string, file: File) => {
@@ -33,5 +33,10 @@ export const scannerApi = {
   analyzeLicenseInsights: (moduleId: string) =>
     apiClient
       .post<ApiResponse<{ success: boolean; message: string }>>(`/api/insights/license/${moduleId}/analyze`)
+      .then((res) => res.data),
+
+  analyzeVulnerabilityInsights: (moduleId: string) =>
+    apiClient
+      .post<ApiResponse<VulnerabilityAiInsight>>(`/api/insights/vulnerability/${moduleId}/analyze`)
       .then((res) => res.data),
 };
