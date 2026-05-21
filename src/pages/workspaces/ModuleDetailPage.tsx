@@ -102,7 +102,7 @@ export function ModuleDetailPage() {
     </div>
   );
 
-  const allVulnerabilities = components.flatMap(c => 
+  const rawVulnerabilities = components.flatMap(c => 
     (c.vulnerabilities || []).map(v => ({
       componentId: c.id,
       componentName: c.name,
@@ -110,6 +110,16 @@ export function ModuleDetailPage() {
       ...v
     }))
   );
+
+  const uniqueVulnsMapGlobal = new Map<string, typeof rawVulnerabilities[0]>();
+  rawVulnerabilities.forEach(v => {
+    const key = `${v.componentName}-${v.componentVersion}-${v.externalId}`;
+    if (!uniqueVulnsMapGlobal.has(key)) {
+      uniqueVulnsMapGlobal.set(key, v);
+    }
+  });
+
+  const allVulnerabilities = Array.from(uniqueVulnsMapGlobal.values());
 
   const filteredVulnerabilities = allVulnerabilities.filter(v => 
     v.componentName.toLowerCase().includes(vulnSearchTerm.toLowerCase())
