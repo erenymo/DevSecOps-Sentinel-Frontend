@@ -92,3 +92,19 @@ export const useAnalyzeVulnerabilityInsights = (moduleId: string) => {
   });
 };
 
+export const useExportSbom = (moduleId: string) => {
+  return useMutation({
+    mutationFn: () => scannerApi.exportSbom(moduleId),
+    onSuccess: (data) => {
+      const url = window.URL.createObjectURL(data.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", data.filename);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    },
+  });
+};
+

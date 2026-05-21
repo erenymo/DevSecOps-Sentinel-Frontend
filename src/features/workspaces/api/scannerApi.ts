@@ -44,4 +44,24 @@ export const scannerApi = {
     apiClient
       .post<ApiResponse<VulnerabilityAiInsight>>(`/api/insights/vulnerability/${moduleId}/analyze`)
       .then((res) => res.data),
+
+  exportSbom: (moduleId: string) =>
+    apiClient
+      .get(`/api/module/${moduleId}/export-sbom`, {
+        responseType: "blob",
+      })
+      .then((res) => {
+        const contentDisposition = res.headers["content-disposition"];
+        let filename = "sbom.json";
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1].replace(/['"]/g, "");
+          }
+        }
+        return {
+          data: res.data as Blob,
+          filename,
+        };
+      }),
 };

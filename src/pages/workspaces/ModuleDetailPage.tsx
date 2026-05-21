@@ -14,6 +14,7 @@ import {
   useAnalyzeLicenseInsights,
   useAnalyzeVulnerabilityInsights,
   useVulnerabilityInsights,
+  useExportSbom,
 } from "@/features/workspaces/hooks/useScanner";
 import {
   Select,
@@ -38,6 +39,7 @@ import {
   ExternalLink,
   CheckCircle2,
   XCircle,
+  Download,
 } from "lucide-react";
 import type {
   Module,
@@ -145,6 +147,7 @@ export function ModuleDetailPage() {
   const analyzeVulnerabilityInsights = useAnalyzeVulnerabilityInsights(
     moduleId || "",
   );
+  const exportSbom = useExportSbom(moduleId || "");
 
   const [isAutoAnalyzing, setIsAutoAnalyzing] = useState(false);
 
@@ -538,18 +541,18 @@ export function ModuleDetailPage() {
           </div>
         </div>
 
-        {/* Upload Action */}
+        {/* Upload & Export Actions */}
         <div className="flex w-full sm:w-auto items-center gap-2">
           <Input
             type="file"
             accept=".json,.xml"
             onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="w-full sm:w-[250px] cursor-pointer"
+            className="w-full sm:w-[200px] cursor-pointer"
           />
           <Button
             onClick={() => file && uploadSbom.mutate(file)}
             disabled={!file || uploadSbom.isPending}
-            className="gap-2"
+            className="gap-2 shrink-0"
           >
             {uploadSbom.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -557,6 +560,19 @@ export function ModuleDetailPage() {
               <Upload className="w-4 h-4" />
             )}
             Analyze
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => exportSbom.mutate()}
+            disabled={exportSbom.isPending}
+            className="gap-2 shrink-0"
+          >
+            {exportSbom.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            Export SBOM
           </Button>
         </div>
       </div>
