@@ -40,6 +40,11 @@ export interface ComponentVulnerability {
   fixedVersion?: string;
 }
 
+export interface PackageLicenseInsight {
+  riskExplanationForManagement: string;
+  recommendedAlternativesJson: string;
+}
+
 export interface Component {
   id: string;
   name: string;
@@ -50,4 +55,5 @@ export interface Component {
   dependencyPath?: string;
   licenseNames?: string[];
   vulnerabilities?: ComponentVulnerability[];
+  aiInsight?: PackageLicenseInsight;
 }

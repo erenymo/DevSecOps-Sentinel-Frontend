@@ -18,7 +18,9 @@ import {
   ChevronDown,
   ChevronRight,
   ArrowUpDown,
-  Search
+  Search,
+  Sparkles,
+  Info
 } from "lucide-react";
 import type { Module, Component } from "@/features/workspaces/types";
 
@@ -64,6 +66,7 @@ export function ModuleDetailPage() {
   const [vulnSearchTerm, setVulnSearchTerm] = useState("");
   const [vulnSort, setVulnSort] = useState<{ key: "component" | "severity" | "status", direction: "asc" | "desc" } | null>({ key: "severity", direction: "desc" });
   const [expandedVulnGroups, setExpandedVulnGroups] = useState<Set<string>>(new Set());
+  const [expandedLicenseRows, setExpandedLicenseRows] = useState<Set<string>>(new Set());
   
   const uploadSbom = useUploadSbom(moduleId || "", () => {
     setIsEnriching(true);
@@ -222,6 +225,17 @@ export function ModuleDetailPage() {
       const next = new Set(prev);
       if (next.has(compName)) next.delete(compName);
       else next.add(compName);
+      return next;
+    });
+  };
+
+  const toggleLicenseRow = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setExpandedLicenseRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -604,10 +618,31 @@ export function ModuleDetailPage() {
                     </div>
                   ) : licenseIssueComponents.length > 0 ? (
                     <div className="space-y-4">
+                      {/* AI Summary Card */}
+                      <Card className="bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 border-indigo-500/20 shadow-none">
+                        <CardContent className="p-4 flex items-start gap-4">
+                          <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                            <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
+                              AI License Insights
+                              <span className="inline-flex items-center rounded-full bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 text-[10px] font-bold">Beta</span>
+                            </h4>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              Toplam <strong>{licenseIssueComponents.length}</strong> riskli lisans bulundu. 
+                              Yapay zeka <strong>{licenseIssueComponents.filter(c => c.aiInsight).length}</strong> paketi analiz etti. 
+                              Yöneticiler için hazırlanan risk analizini ve önerilen <strong>MIT/Apache</strong> alternatiflerini görmek için satırları genişletin.
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      
                       <div className="rounded-md border overflow-x-auto">
                         <table className="w-full min-w-[600px] text-sm text-left">
                           <thead className="bg-muted/50 text-muted-foreground">
                             <tr>
+                              <th className="px-4 py-3 font-medium w-12 text-center"></th>
                               <th className="px-4 py-3 font-medium">Component</th>
                               <th className="px-4 py-3 font-medium">Version</th>
                               <th className="px-4 py-3 font-medium">Type</th>
@@ -623,7 +658,21 @@ export function ModuleDetailPage() {
                               const riskText = isHighRisk ? "High" : "Medium";
                               
                               return (
-                                <tr key={comp.id} className="hover:bg-muted/50 transition-colors border-b">
+                                <Fragment key={comp.id}>
+                                <tr onClick={(e) => comp.aiInsight && toggleLicenseRow(comp.id, e)} className={`transition-colors border-b ${comp.aiInsight ? "cursor-pointer hover:bg-muted/50" : "hover:bg-muted/30"}`}>
+                                  <td className="px-4 py-3 text-center w-12 align-middle">
+                                    {comp.aiInsight ? (
+                                      <button className="p-1 hover:bg-muted rounded-md text-muted-foreground hover:text-foreground transition-colors mx-auto flex items-center justify-center">
+                                        {expandedLicenseRows.has(comp.id) ? (
+                                          <ChevronDown className="w-4 h-4 text-primary animate-in fade-in zoom-in duration-200" />
+                                        ) : (
+                                          <ChevronRight className="w-4 h-4 text-muted-foreground animate-in fade-in zoom-in duration-200" />
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <span className="text-[9px] leading-tight font-semibold text-muted-foreground/60 select-none block text-center">Analiz<br/>Bekleniyor</span>
+                                    )}
+                                  </td>
                                   <td className="px-4 py-3 font-semibold text-foreground">{comp.name}</td>
                                   <td className="px-4 py-3 text-muted-foreground">{comp.version}</td>
                                   <td className="px-4 py-3">
@@ -661,6 +710,48 @@ export function ModuleDetailPage() {
                                     )}
                                   </td>
                                 </tr>
+                                {expandedLicenseRows.has(comp.id) && comp.aiInsight && (
+                                  <tr className="bg-muted/5 dark:bg-muted/2 border-b">
+                                    <td colSpan={7} className="px-6 py-5">
+                                      <div className="space-y-5 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <div className="bg-background rounded-lg border p-4 shadow-sm">
+                                          <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+                                            <Info className="w-4 h-4 text-indigo-500" /> Yönetimsel Risk Özeti
+                                          </h5>
+                                          <p className="text-sm text-foreground/90 leading-relaxed font-medium">
+                                            {comp.aiInsight.riskExplanationForManagement}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
+                                            <PackageOpen className="w-4 h-4 text-green-500" /> Önerilen MIT / Apache Alternatifleri
+                                          </h5>
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {(() => {
+                                              try {
+                                                const alts = JSON.parse(comp.aiInsight.recommendedAlternativesJson);
+                                                return alts.map((alt: any, i: number) => (
+                                                  <Card key={i} className="bg-background shadow-sm border-dashed">
+                                                    <CardContent className="p-4 flex flex-col gap-2">
+                                                      <div className="flex justify-between items-start">
+                                                        <span className="font-bold text-sm text-primary">{alt.PackageName}</span>
+                                                        <span className="inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-bold bg-green-500/10 text-green-600 border border-green-500/20">{alt.LicenseType}</span>
+                                                      </div>
+                                                      <p className="text-xs text-muted-foreground leading-relaxed">{alt.ReasonForRecommendation}</p>
+                                                    </CardContent>
+                                                  </Card>
+                                                ));
+                                              } catch (e) {
+                                                return <div className="text-sm text-red-500">Failed to parse alternatives.</div>;
+                                              }
+                                            })()}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                                </Fragment>
                               );
                             })}
                           </tbody>
