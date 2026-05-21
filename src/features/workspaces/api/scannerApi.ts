@@ -24,4 +24,14 @@ export const scannerApi = {
     apiClient
       .put<ApiResponse<boolean>>("/api/components/vex-status", data)
       .then((res) => res.data),
+
+  getScanStatus: (moduleId: string) =>
+    apiClient
+      .get<ApiResponse<{ isDependenciesParsed: boolean; isVulnEnrichmentCompleted: boolean; isLicenseEnrichmentCompleted: boolean }>>(`/api/scanner/status/${moduleId}`)
+      .then((res) => res.data),
+
+  analyzeLicenseInsights: (moduleId: string) =>
+    apiClient
+      .post<ApiResponse<{ success: boolean; message: string }>>(`/api/insights/license/${moduleId}/analyze`)
+      .then((res) => res.data),
 };

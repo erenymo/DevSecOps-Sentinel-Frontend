@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWorkspaces } from "@/features/workspaces/hooks/useWorkspaces";
 import { useModulesByWorkspace } from "@/features/workspaces/hooks/useModules";
-import { useUploadSbom, useModuleComponents, useUpdateVexStatus } from "@/features/workspaces/hooks/useScanner";
+import { useUploadSbom, useModuleComponents, useUpdateVexStatus, useScanStatus, useAnalyzeLicenseInsights } from "@/features/workspaces/hooks/useScanner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   PackageOpen,
@@ -48,7 +48,9 @@ const getSeverityColor = (severityLevel?: string) => {
   if (upper === "LOW")
     return "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 border border-green-200 dark:border-green-500/30";
   return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700";
+  return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700";
 };
+
 
 export function ModuleDetailPage() {
   const { workspaceId, moduleId } = useParams<{
@@ -58,7 +60,6 @@ export function ModuleDetailPage() {
 
   const [file, setFile] = useState<File | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [isEnriching, setIsEnriching] = useState<boolean>(false);
   
   const [depSearchTerm, setDepSearchTerm] = useState("");
   const [depSort, setDepSort] = useState<{ key: "name" | "license", direction: "asc" | "desc" } | null>({ key: "name", direction: "asc" });
@@ -69,9 +70,7 @@ export function ModuleDetailPage() {
   const [expandedLicenseRows, setExpandedLicenseRows] = useState<Set<string>>(new Set());
   
   const uploadSbom = useUploadSbom(moduleId || "", () => {
-    setIsEnriching(true);
     setFile(null);
-    setTimeout(() => setIsEnriching(false), 30000); // 30 sn timeout
   });
   const updateVexStatus = useUpdateVexStatus(moduleId || "");
 
@@ -79,8 +78,29 @@ export function ModuleDetailPage() {
     updateVexStatus.mutate({ componentId, externalId, status });
   };
 
-  const { data: componentsData, isLoading: isComponentsLoading } = useModuleComponents(moduleId || "", isEnriching);
+  const { data: componentsData, isLoading: isComponentsLoading } = useModuleComponents(moduleId || "");
   const components = componentsData?.data || [];
+  
+  const { data: scanStatusResult } = useScanStatus(moduleId || "");
+  const scanStatus = scanStatusResult?.data;
+  const isEnrichingLicenses = scanStatus?.isDependenciesParsed ? !scanStatus.isLicenseEnrichmentCompleted : false;
+  const isEnrichingVulns = scanStatus?.isDependenciesParsed ? !scanStatus.isVulnEnrichmentCompleted : false;
+
+  const analyzeLicenseInsights = useAnalyzeLicenseInsights(moduleId || "");
+
+  const renderLoadingUI = () => (
+    <div className="p-12 flex flex-col justify-center items-center gap-4 max-w-md mx-auto mt-4">
+      <div className="flex space-x-2">
+        <div className="w-3 h-3 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+        <div className="w-3 h-3 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+        <div className="w-3 h-3 bg-primary rounded-full animate-bounce"></div>
+      </div>
+      <div className="space-y-1 text-center w-full mt-2">
+        <p className="text-sm font-semibold text-foreground">Veri Çekiliyor / Analiz Sürüyor</p>
+        <p className="text-xs font-medium text-muted-foreground">Sonuçlar yüklenirken lütfen bekleyin...</p>
+      </div>
+    </div>
+  );
 
   const allVulnerabilities = components.flatMap(c => 
     (c.vulnerabilities || []).map(v => ({
@@ -286,7 +306,7 @@ export function ModuleDetailPage() {
                     {l}
                   </span>
                 ))
-              ) : isEnriching ? (
+              ) : isEnrichingLicenses ? (
                 <span className="flex items-center gap-1.5 text-muted-foreground text-xs font-medium">
                   <Loader2 className="w-3 h-3 animate-spin text-primary" />
                 </span>
@@ -418,9 +438,7 @@ export function ModuleDetailPage() {
               
               {tab.label === "Dependencies" ? (
                 isComponentsLoading ? (
-                  <div className="p-8 flex justify-center items-center">
-                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                  </div>
+                  renderLoadingUI()
                 ) : components.length > 0 ? (
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 max-w-sm relative">
@@ -472,11 +490,8 @@ export function ModuleDetailPage() {
                   </div>
                 )
               ) : tab.label === "Vulnerabilities" ? (
-                isComponentsLoading || isEnriching ? (
-                  <div className="p-12 flex flex-col justify-center items-center gap-4">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                    <p className="text-sm font-medium text-muted-foreground animate-pulse">The scanning process is ongoing.</p>
-                  </div>
+                isComponentsLoading || isEnrichingVulns ? (
+                  renderLoadingUI()
                 ) : groupedVulnerabilities.length > 0 ? (
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 max-w-sm relative">
@@ -611,29 +626,85 @@ export function ModuleDetailPage() {
                     c.licenseNames && c.licenseNames.some(l => getLicenseRisk(l) !== "low")
                   );
                   
-                  return isComponentsLoading || isEnriching ? (
-                    <div className="p-12 flex flex-col justify-center items-center gap-4">
-                      <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                      <p className="text-sm font-medium text-muted-foreground animate-pulse">The scanning process is ongoing.</p>
-                    </div>
+                  let score = 100;
+                  licenseIssueComponents.forEach(comp => {
+                    const isHighRisk = comp.licenseNames?.some(l => getLicenseRisk(l) === "high");
+                    const isMediumRisk = comp.licenseNames?.some(l => getLicenseRisk(l) === "medium");
+                    const penalty = isHighRisk ? 25 : (isMediumRisk ? 10 : 0);
+                    const weight = comp.isTransitive ? 0.5 : 1.0;
+                    score -= (penalty * weight);
+                  });
+                  score = Math.max(0, Math.min(100, Math.round(score)));
+                  
+                  const radius = 28;
+                  const circumference = 2 * Math.PI * radius;
+                  const strokeDashoffset = circumference - (score / 100) * circumference;
+                  const scoreColor = score >= 80 ? 'text-green-500' : score >= 50 ? 'text-amber-500' : 'text-red-500';
+                  
+                  return isComponentsLoading || isEnrichingLicenses ? (
+                    renderLoadingUI()
                   ) : licenseIssueComponents.length > 0 ? (
                     <div className="space-y-4">
                       {/* AI Summary Card */}
                       <Card className="bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 border-indigo-500/20 shadow-none">
-                        <CardContent className="p-4 flex items-start gap-4">
-                          <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                            <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                        <CardContent className="p-0 flex flex-col sm:flex-row items-stretch">
+                          {/* 20% Section: Score */}
+                          <div className="w-full sm:w-[20%] border-b sm:border-b-0 sm:border-r border-indigo-500/20 p-4 flex flex-col items-center justify-center gap-2 bg-background/40">
+                            <div className="relative w-20 h-20">
+                              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 72 72">
+                                <circle cx="36" cy="36" r="28" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-muted/30" />
+                                <circle cx="36" cy="36" r="28" stroke="currentColor" strokeWidth="6" fill="transparent" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} className={`${scoreColor} transition-all duration-1000 ease-out`} strokeLinecap="round" />
+                              </svg>
+                              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                <span className={`text-2xl font-black ${scoreColor}`}>{score}</span>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-center">License Score</span>
                           </div>
-                          <div>
-                            <h4 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
-                              AI License Insights
-                              <span className="inline-flex items-center rounded-full bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 text-[10px] font-bold">Beta</span>
-                            </h4>
-                            <p className="text-xs text-muted-foreground leading-relaxed">
-                              Toplam <strong>{licenseIssueComponents.length}</strong> riskli lisans bulundu. 
-                              Yapay zeka <strong>{licenseIssueComponents.filter(c => c.aiInsight).length}</strong> paketi analiz etti. 
-                              Yöneticiler için hazırlanan risk analizini ve önerilen <strong>MIT/Apache</strong> alternatiflerini görmek için satırları genişletin.
-                            </p>
+                          
+                          {/* 80% Section: Content */}
+                          <div className="w-full sm:w-[80%] p-5 flex items-start gap-4">
+                            <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                              <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                                AI License Insights
+                                <span className="inline-flex items-center rounded-full bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 text-[10px] font-bold">Beta</span>
+                              </h4>
+                              <p className="text-xs text-muted-foreground leading-relaxed font-medium">
+                                {score >= 80 
+                                  ? "Projenizin lisans uyumluluğu oldukça iyi durumda. Kritik bir hukuki veya ticari risk tespit edilmedi. Yapay zeka ile incelenen bileşenler genel politikalarınıza uygun görünmektedir."
+                                  : score >= 50
+                                  ? "Projenizde bazı copyleft veya inceleme gerektiren lisanslar tespit edildi. Ticari dağıtım veya kapalı kaynak kullanım senaryolarına karşı tablodaki lisanslı paketleri detaylı olarak gözden geçirmeniz tavsiye edilir."
+                                  : "Projenizdeki bileşenlerde yüksek riskli lisanslar tespit edildi! Bu durum projenizin ticari lisanslanmasını veya kapalı kaynak kodlu yapısını ciddi şekilde tehdit edebilir. Derhal alternatifleri inceleyerek aksiyon alın."}
+                              </p>
+                              <div className="mt-3 flex items-center gap-4 text-[11px] text-muted-foreground/80 font-medium">
+                                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-red-500/50"></span> {licenseIssueComponents.filter(c => c.licenseNames?.some(l => getLicenseRisk(l) === "high")).length} Yüksek Risk</div>
+                                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-500/50"></span> {licenseIssueComponents.filter(c => c.licenseNames?.some(l => getLicenseRisk(l) === "medium") && !c.licenseNames?.some(l => getLicenseRisk(l) === "high")).length} Orta Risk</div>
+                                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500/50"></span> {licenseIssueComponents.filter(c => c.aiInsight).length} AI Analizi Hazır</div>
+                              </div>
+                              
+                              {licenseIssueComponents.some(c => !c.aiInsight) && (
+                                <div className="mt-4 flex items-center justify-between bg-background/50 border border-indigo-500/10 rounded-md p-3">
+                                  <div className="text-xs text-muted-foreground">
+                                    <span className="font-semibold text-indigo-600 dark:text-indigo-400">{licenseIssueComponents.filter(c => !c.aiInsight).length} paket</span> için AI analizi bekleniyor.
+                                  </div>
+                                  <Button 
+                                    size="sm" 
+                                    className="h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                                    onClick={() => analyzeLicenseInsights.mutate()}
+                                    disabled={analyzeLicenseInsights.isPending}
+                                  >
+                                    {analyzeLicenseInsights.isPending ? (
+                                      <><Loader2 className="w-3 h-3 mr-2 animate-spin" /> Analiz Ediliyor...</>
+                                    ) : (
+                                      <><Sparkles className="w-3 h-3 mr-2" /> Analiz Et</>
+                                    )}
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
