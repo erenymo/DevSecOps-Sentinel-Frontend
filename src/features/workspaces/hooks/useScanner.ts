@@ -74,7 +74,7 @@ export const useAnalyzeLicenseInsights = (moduleId: string) => {
 export const useVulnerabilityInsights = (moduleId: string) => {
   return useQuery({
     queryKey: ["vulnerability-insights", moduleId],
-    queryFn: () => scannerApi.analyzeVulnerabilityInsights(moduleId),
+    queryFn: () => scannerApi.getVulnerabilityInsights(moduleId),
     enabled: !!moduleId,
     staleTime: 1000 * 60 * 5, // 5 minutes cache
   });

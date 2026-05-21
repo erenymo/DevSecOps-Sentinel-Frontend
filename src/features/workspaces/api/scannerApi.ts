@@ -35,6 +35,11 @@ export const scannerApi = {
       .post<ApiResponse<{ success: boolean; message: string }>>(`/api/insights/license/${moduleId}/analyze`)
       .then((res) => res.data),
 
+  getVulnerabilityInsights: (moduleId: string) =>
+    apiClient
+      .get<ApiResponse<VulnerabilityAiInsight>>(`/api/insights/vulnerability/${moduleId}/insights`)
+      .then((res) => res.data),
+
   analyzeVulnerabilityInsights: (moduleId: string) =>
     apiClient
       .post<ApiResponse<VulnerabilityAiInsight>>(`/api/insights/vulnerability/${moduleId}/analyze`)

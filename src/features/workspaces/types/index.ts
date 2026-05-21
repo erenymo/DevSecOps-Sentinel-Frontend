@@ -46,6 +46,8 @@ export interface ComponentVulnerability {
 
 export interface PackageLicenseInsight {
   riskExplanationForManagement: string;
+  problematicUseCasesJson?: string;
+  safeUseCasesJson?: string;
   recommendedAlternativesJson: string;
 }
 
